@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { APPS_SCRIPT_URL } from '../services/config';
 
 export default function Login() {
@@ -38,9 +38,11 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4 shadow-2xl">
-            <Building2 size={30} className="text-white" />
-          </div>
+          <img
+            src="/logo-1024.png"
+            alt="MSAD CNC"
+            className="w-24 h-24 object-contain mx-auto mb-4 drop-shadow-2xl"
+          />
           <h1 className="text-2xl font-bold text-white tracking-tight">MSAD CNC</h1>
           <p className="text-gray-400 text-sm mt-1">نظام إدارة الأعمال</p>
         </div>

@@ -1,4 +1,4 @@
-import { RefreshCw, AlertCircle, CheckCircle2, Loader2, Building2 } from 'lucide-react';
+import { RefreshCw, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 
 interface HeaderProps {
@@ -21,9 +21,7 @@ export default function Header({ title }: HeaderProps) {
       <div className="flex items-center gap-2 min-w-0">
         {/* Logo pill — mobile only */}
         <div className="lg:hidden flex items-center gap-1.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Building2 size={14} className="text-white" />
-          </div>
+          <img src="/logo-1024.png" alt="MSAD CNC" className="w-7 h-7 object-contain" />
         </div>
         <h1 className="text-base lg:text-xl font-semibold text-gray-800 truncate">{title}</h1>
       </div>

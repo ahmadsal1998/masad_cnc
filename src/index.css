@@ -8,6 +8,12 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  touch-action: pan-x pan-y;
+}
+
+/* Prevent pinch-zoom on all elements */
+* {
+  touch-action: pan-x pan-y;
 }
 
 #root {

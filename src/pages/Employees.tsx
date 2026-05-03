@@ -51,12 +51,12 @@ export default function Employees() {
   function openEdit(emp: Employee) {
     setEditingId(emp.id);
     setForm({
-      name: emp.name,
-      position: emp.position,
-      phone: emp.phone,
-      salary: String(emp.salary),
-      joinDate: emp.joinDate,
-      notes: emp.notes,
+      name: emp.name ?? '',
+      position: emp.position ?? '',
+      phone: emp.phone ?? '',
+      salary: String(emp.salary ?? 0),
+      joinDate: emp.joinDate ?? '',
+      notes: emp.notes ?? '',
     });
     setErrors({});
     setModalOpen(true);

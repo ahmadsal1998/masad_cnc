@@ -49,7 +49,8 @@ function sheetToObjects(sheet) {
   return data.slice(1).map(function(row) {
     var obj = {};
     headers.forEach(function(h, i) {
-      var val = row[i];
+      // getDataRange may not extend to columns that were never filled — default to ''
+      var val = (i < row.length && row[i] !== undefined && row[i] !== null) ? row[i] : '';
       // Parse JSON fields (items arrays stored as JSON strings)
       if (h === 'items' && typeof val === 'string' && val.trim() !== '') {
         try { val = JSON.parse(val); } catch(e) { val = []; }

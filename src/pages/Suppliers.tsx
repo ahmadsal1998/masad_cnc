@@ -35,10 +35,10 @@ export default function Suppliers() {
     if (!q) return suppliers;
     return suppliers.filter(
       s =>
-        s.name.toLowerCase().includes(q) ||
-        s.phone.includes(q) ||
-        s.email.toLowerCase().includes(q) ||
-        s.address.toLowerCase().includes(q),
+        (s.name ?? '').toLowerCase().includes(q) ||
+        (s.phone ?? '').includes(q) ||
+        (s.email ?? '').toLowerCase().includes(q) ||
+        (s.address ?? '').toLowerCase().includes(q),
     );
   }, [suppliers, search]);
 
@@ -52,12 +52,12 @@ export default function Suppliers() {
   function openEdit(supplier: Supplier) {
     setEditingId(supplier.id);
     setForm({
-      name: supplier.name,
-      phone: supplier.phone,
-      email: supplier.email,
-      address: supplier.address,
-      balance: String(supplier.balance),
-      notes: supplier.notes,
+      name: supplier.name ?? '',
+      phone: supplier.phone ?? '',
+      email: supplier.email ?? '',
+      address: supplier.address ?? '',
+      balance: String(supplier.balance ?? 0),
+      notes: supplier.notes ?? '',
     });
     setErrors({});
     setModalOpen(true);

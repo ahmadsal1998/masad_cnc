@@ -35,10 +35,10 @@ export default function Customers() {
     if (!q) return customers;
     return customers.filter(
       c =>
-        c.name.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.address.toLowerCase().includes(q),
+        (c.name ?? '').toLowerCase().includes(q) ||
+        (c.phone ?? '').includes(q) ||
+        (c.email ?? '').toLowerCase().includes(q) ||
+        (c.address ?? '').toLowerCase().includes(q),
     );
   }, [customers, search]);
 
@@ -52,12 +52,12 @@ export default function Customers() {
   function openEdit(customer: Customer) {
     setEditingId(customer.id);
     setForm({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email,
-      address: customer.address,
-      balance: String(customer.balance),
-      notes: customer.notes,
+      name: customer.name ?? '',
+      phone: customer.phone ?? '',
+      email: customer.email ?? '',
+      address: customer.address ?? '',
+      balance: String(customer.balance ?? 0),
+      notes: customer.notes ?? '',
     });
     setErrors({});
     setModalOpen(true);

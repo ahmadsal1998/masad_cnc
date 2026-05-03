@@ -21,7 +21,7 @@ export default function Sidebar() {
     <aside className="w-64 bg-gray-900 text-white flex flex-col h-screen sticky top-0" dir="rtl">
       {/* Brand */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-700/60">
-        <img src="/logo-1024.png" alt="MSAD CNC" className="w-9 h-9 object-contain shrink-0" />
+        <img src="/logo.jpeg" alt="MSAD CNC" className="w-9 h-9 object-contain shrink-0" />
         <div>
           <p className="font-bold text-base leading-tight text-white">MSAD CNC</p>
           <p className="text-xs text-gray-400 leading-tight">نظام الإدارة</p>

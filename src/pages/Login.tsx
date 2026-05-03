@@ -39,7 +39,7 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img
-            src="/logo-1024.png"
+            src="/logo.jpeg"
             alt="MSAD CNC"
             className="w-24 h-24 object-contain mx-auto mb-4 drop-shadow-2xl"
           />

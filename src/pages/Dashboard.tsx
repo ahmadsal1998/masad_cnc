@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import {
   TrendingUp, ShoppingCart, Users, Truck,
-  DollarSign, AlertCircle, Loader2, Activity
+  DollarSign, AlertCircle, Loader2, Activity, Receipt
 } from 'lucide-react';
 
 interface StatCardProps {
@@ -31,18 +31,26 @@ const fmt = (n: number) =>
   new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 export default function Dashboard() {
-  const { employees, customers, suppliers, purchases, sales, syncStatus } = useData();
+  const { employees, customers, suppliers, purchases, sales, expenses, syncStatus } = useData();
 
   const stats = useMemo(() => {
-    const totalSales     = sales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const paidSales      = sales.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
-    const totalPurchases = purchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const paidPurchases  = purchases.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
-    const customerDebts  = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
-    const supplierDebts  = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
-    const netProfit      = totalSales - totalPurchases;
-    return { totalSales, paidSales, totalPurchases, paidPurchases, customerDebts, supplierDebts, netProfit };
-  }, [sales, purchases, customers, suppliers]);
+    const totalSales      = sales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const paidSales       = sales.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
+    const totalPurchases  = purchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const paidPurchases   = purchases.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
+    const customerDebts   = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
+    const supplierDebts   = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
+    const totalExpenses   = expenses.reduce((s, x) => s + (x.amount ?? 0), 0);
+    const todayStr        = new Date().toISOString().split('T')[0];
+    const monthStr        = todayStr.slice(0, 7);
+    const todayExpenses   = expenses.filter(e => e.date === todayStr).reduce((s, x) => s + (x.amount ?? 0), 0);
+    const monthlyExpenses = expenses.filter(e => e.date?.startsWith(monthStr)).reduce((s, x) => s + (x.amount ?? 0), 0);
+    const netProfit       = totalSales - totalPurchases - totalExpenses;
+    return {
+      totalSales, paidSales, totalPurchases, paidPurchases,
+      customerDebts, supplierDebts, totalExpenses, todayExpenses, monthlyExpenses, netProfit,
+    };
+  }, [sales, purchases, customers, suppliers, expenses]);
 
   const recentSales     = useMemo(() => [...sales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [sales]);
   const recentPurchases = useMemo(() => [...purchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [purchases]);
@@ -95,13 +103,21 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Secondary stats — 2 cols on mobile, 3 on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+      {/* Secondary stats — 2 cols on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <StatCard
           title="صافي الربح"
           value={fmt(stats.netProfit)}
+          subtitle="مبيعات − مشتريات − مصروفات"
           icon={<DollarSign size={20} className={stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'} />}
           colorBg={stats.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50'}
+        />
+        <StatCard
+          title="إجمالي المصروفات"
+          value={fmt(stats.totalExpenses)}
+          subtitle={`اليوم: ${fmt(stats.todayExpenses)} · الشهر: ${fmt(stats.monthlyExpenses)}`}
+          icon={<Receipt size={20} className="text-red-500" />}
+          colorBg="bg-red-50"
         />
         <StatCard
           title="الموظفون"
@@ -110,15 +126,13 @@ export default function Dashboard() {
           icon={<Users size={20} className="text-indigo-600" />}
           colorBg="bg-indigo-50"
         />
-        <div className="col-span-2 lg:col-span-1">
-          <StatCard
-            title="النشاط"
-            value={String(sales.length + purchases.length)}
-            subtitle={`${sales.length} مبيعات · ${purchases.length} مشتريات`}
-            icon={<Activity size={20} className="text-teal-600" />}
-            colorBg="bg-teal-50"
-          />
-        </div>
+        <StatCard
+          title="النشاط"
+          value={String(sales.length + purchases.length)}
+          subtitle={`${sales.length} مبيعات · ${purchases.length} مشتريات`}
+          icon={<Activity size={20} className="text-teal-600" />}
+          colorBg="bg-teal-50"
+        />
       </div>
 
       {/* Recent tables — stacked on mobile, side by side on lg */}

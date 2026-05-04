@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, TrendingUp, ShoppingCart, UserCheck,
-  MoreHorizontal, Users, Truck, LogOut, X
+  MoreHorizontal, Users, Truck, Receipt, LogOut, X
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -14,8 +14,9 @@ const MAIN_NAV = [
 ];
 
 const MORE_NAV = [
-  { to: '/employees', icon: Users, label: 'الموظفون' },
-  { to: '/suppliers', icon: Truck, label: 'الموردون' },
+  { to: '/employees', icon: Users,    label: 'الموظفون' },
+  { to: '/suppliers', icon: Truck,    label: 'الموردون' },
+  { to: '/expenses',  icon: Receipt,  label: 'المصروفات' },
 ];
 
 export default function BottomNav() {

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { ToastProvider } from './context/ToastContext';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -9,6 +10,7 @@ import Customers from './pages/Customers';
 import Suppliers from './pages/Suppliers';
 import Purchases from './pages/Purchases';
 import Sales from './pages/Sales';
+import Expenses from './pages/Expenses';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -43,6 +45,7 @@ function AppRoutes() {
           <Route path="/suppliers"  element={<Suppliers />} />
           <Route path="/purchases"  element={<Purchases />} />
           <Route path="/sales"      element={<Sales />} />
+          <Route path="/expenses"   element={<Expenses />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -53,9 +56,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   );
 }

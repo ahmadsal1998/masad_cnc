@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, UserCheck, Truck,
-  ShoppingCart, TrendingUp, LogOut
+  ShoppingCart, TrendingUp, Receipt, LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: '/suppliers',  icon: Truck,           label: 'الموردون',    end: false },
   { to: '/purchases',  icon: ShoppingCart,    label: 'المشتريات',   end: false },
   { to: '/sales',      icon: TrendingUp,      label: 'المبيعات',    end: false },
+  { to: '/expenses',   icon: Receipt,         label: 'المصروفات',   end: false },
 ];
 
 export default function Sidebar() {

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useToast } from '../context/ToastContext';
 import type { Purchase, PurchaseItem } from '../types';
 import { generateId } from '../utils/hash';
 import Modal from '../components/ui/Modal';
@@ -16,6 +17,8 @@ const EMPTY_FORM = {
   supplierName: '',
   date: new Date().toISOString().split('T')[0],
   paidAmount: 0,
+  discountType: 'fixed' as 'fixed' | 'percent',
+  discountValue: 0,
   notes: '',
 };
 
@@ -24,14 +27,13 @@ const fmt = (n: number) =>
 
 export default function Purchases() {
   const { purchases, suppliers, addPurchase, updatePurchase, removePurchase } = useData();
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [items, setItems] = useState<PurchaseItem[]>([{ ...EMPTY_ITEM }]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const filtered = useMemo(() =>
     purchases.filter(p =>
       p.supplierName.toLowerCase().includes(search.toLowerCase()) ||
@@ -51,6 +53,8 @@ export default function Purchases() {
       supplierName: p.supplierName,
       date: p.date,
       paidAmount: p.paidAmount,
+      discountType: p.discountType ?? 'fixed',
+      discountValue: p.discountValue ?? 0,
       notes: p.notes,
     });
     setItems(Array.isArray(p.items) ? p.items.map(i => ({ ...i })) : [{ ...EMPTY_ITEM }]);
@@ -75,49 +79,45 @@ export default function Purchases() {
   const addItem = () => setItems(prev => [...prev, { ...EMPTY_ITEM }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const totalAmount = items.reduce((s, i) => s + (i.total || 0), 0);
+  const subtotal = items.reduce((s, i) => s + (i.total || 0), 0);
+  const discountAmount = form.discountType === 'percent'
+    ? (subtotal * Math.min(Math.max(form.discountValue, 0), 100)) / 100
+    : Math.min(Math.max(form.discountValue, 0), subtotal);
+  const totalAmount = subtotal - discountAmount;
 
   const handleSupplierChange = (id: string) => {
     const sup = suppliers.find(s => s.id === id);
     setForm(f => ({ ...f, supplierId: id, supplierName: sup?.name ?? '' }));
   };
 
-  const handleSubmit = async () => {
-    if (!form.supplierId) return alert('يرجى اختيار المورد');
-    if (items.length === 0 || items.every(i => !i.description)) return alert('يرجى إضافة صنف واحد على الأقل');
+  const handleSubmit = () => {
+    if (!form.supplierId) { toast.error('يرجى اختيار المورد'); return; }
+    if (items.length === 0 || items.every(i => !i.description)) { toast.error('يرجى إضافة صنف واحد على الأقل'); return; }
+    if (form.discountType === 'percent' && form.discountValue > 100) { toast.error('نسبة الخصم لا يمكن أن تتجاوز 100%'); return; }
+    if (form.discountType === 'fixed' && form.discountValue > subtotal) { toast.error('الخصم لا يمكن أن يتجاوز إجمالي الفاتورة'); return; }
     const purchase: Purchase = {
       id: editingId ?? generateId(),
       supplierId: form.supplierId,
       supplierName: form.supplierName,
       date: form.date,
       items: items.filter(i => i.description),
+      discountType: form.discountType,
+      discountValue: form.discountValue,
+      discountAmount,
       totalAmount,
       paidAmount: parseFloat(String(form.paidAmount)) || 0,
       notes: form.notes,
     };
-    setLoading(true);
-    try {
-      if (editingId) await updatePurchase(purchase);
-      else await addPurchase(purchase);
-      closeModal();
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
+    closeModal();
+    if (editingId) updatePurchase(purchase);
+    else addPurchase(purchase);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!deleteTarget) return;
-    setLoading(true);
-    try {
-      await removePurchase(deleteTarget.id);
-      setDeleteTarget(null);
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    removePurchase(target.id);
   };
 
   const columns = [
@@ -232,6 +232,16 @@ export default function Purchases() {
                   </div>
                 ))}
                 <div className="flex justify-between items-center px-1 pt-1">
+                  <span className="text-sm text-gray-500">المجموع قبل الخصم</span>
+                  <span className="text-sm text-gray-700">{fmt(subtotal)} ₪</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-sm text-green-700">الخصم</span>
+                    <span className="text-sm font-medium text-green-700">- {fmt(discountAmount)} ₪</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center px-1 pt-1 border-t border-gray-200">
                   <span className="text-sm font-semibold text-gray-700">الإجمالي الكلي</span>
                   <span className="font-bold text-gray-800">{fmt(totalAmount)} ₪</span>
                 </div>
@@ -272,8 +282,20 @@ export default function Purchases() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-gray-50">
+                  <tfoot className="bg-gray-50 text-sm">
                     <tr>
+                      <td colSpan={3} className="px-3 py-2 text-right text-gray-500">المجموع قبل الخصم</td>
+                      <td className="px-3 py-2 text-gray-700">{fmt(subtotal)} ₪</td>
+                      <td></td>
+                    </tr>
+                    {discountAmount > 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-2 text-right font-medium text-green-700">الخصم</td>
+                        <td className="px-3 py-2 font-medium text-green-700">- {fmt(discountAmount)} ₪</td>
+                        <td></td>
+                      </tr>
+                    )}
+                    <tr className="border-t border-gray-200">
                       <td colSpan={3} className="px-3 py-2 text-right font-semibold text-gray-700">الإجمالي</td>
                       <td className="px-3 py-2 font-bold text-gray-800">{fmt(totalAmount)} ₪</td>
                       <td></td>
@@ -281,6 +303,42 @@ export default function Purchases() {
                   </tfoot>
                 </table>
               </div>
+            </div>
+
+            {/* Discount */}
+            <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-sm font-medium text-gray-700 shrink-0">الخصم</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, discountType: 'fixed' }))}
+                  className={`px-3 py-1.5 transition-colors ${form.discountType === 'fixed' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  ثابت ₪
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, discountType: 'percent' }))}
+                  className={`px-3 py-1.5 transition-colors ${form.discountType === 'percent' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  نسبة %
+                </button>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                max={form.discountType === 'percent' ? 100 : undefined}
+                step="0.01"
+                value={form.discountValue || ''}
+                onChange={e => setForm(f => ({ ...f, discountValue: parseFloat(e.target.value) || 0 }))}
+                placeholder={form.discountType === 'percent' ? '0%' : '0.00'}
+                className="w-32"
+              />
+              {discountAmount > 0 && (
+                <span className="text-sm font-medium text-green-700 mr-auto">
+                  وفر {fmt(discountAmount)} ₪
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -304,10 +362,9 @@ export default function Purchases() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
               >
-                {loading ? 'جارٍ الحفظ...' : editingId ? 'حفظ التعديلات' : 'إضافة الفاتورة'}
+                {editingId ? 'حفظ التعديلات' : 'إضافة الفاتورة'}
               </button>
             </div>
           </div>

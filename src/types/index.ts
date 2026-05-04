@@ -41,6 +41,9 @@ export interface Purchase {
   supplierName: string;
   date: string;
   items: PurchaseItem[];
+  discountType?: 'fixed' | 'percent';
+  discountValue?: number;
+  discountAmount?: number;
   totalAmount: number;
   paidAmount: number;
   notes: string;
@@ -59,8 +62,23 @@ export interface Sale {
   customerName: string;
   date: string;
   items: SaleItem[];
+  discountType?: 'fixed' | 'percent';
+  discountValue?: number;
+  discountAmount?: number;
   totalAmount: number;
   paidAmount: number;
+  notes: string;
+}
+
+export interface Expense {
+  id: string;
+  title: string;
+  amount: number;
+  date: string;
+  category: string;
+  paymentMethod: 'cash' | 'bank' | 'credit';
+  supplierId: string;
+  supplierName: string;
   notes: string;
 }
 
@@ -78,6 +96,7 @@ export interface AppData {
   suppliers: Supplier[];
   purchases: Purchase[];
   sales: Sale[];
+  expenses: Expense[];
 }
 
 export interface SyncStatus {

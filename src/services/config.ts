@@ -10,5 +10,6 @@ export const SHEETS = {
   SUPPLIERS:  'suppliers',
   PURCHASES:  'purchases',
   SALES:      'sales',
+  EXPENSES:   'expenses',
   USERS:      'users',
 } as const;

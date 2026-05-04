@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import type { Employee } from '../types';
 import { generateId } from '../utils/hash';
+import { toStr, toDateInput } from '../utils/form';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
@@ -27,7 +28,6 @@ export default function Employees() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<FormState>>({});
-  const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
 
   const filtered = useMemo(() => {
@@ -51,12 +51,12 @@ export default function Employees() {
   function openEdit(emp: Employee) {
     setEditingId(emp.id);
     setForm({
-      name: emp.name ?? '',
-      position: emp.position ?? '',
-      phone: emp.phone ?? '',
-      salary: String(emp.salary ?? 0),
-      joinDate: emp.joinDate ?? '',
-      notes: emp.notes ?? '',
+      name: toStr(emp.name),
+      position: toStr(emp.position),
+      phone: toStr(emp.phone),
+      salary: toStr(emp.salary || 0),
+      joinDate: toDateInput(emp.joinDate),
+      notes: toStr(emp.notes),
     });
     setErrors({});
     setModalOpen(true);
@@ -81,43 +81,27 @@ export default function Employees() {
     return Object.keys(newErrors).length === 0;
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!validate()) return;
-    setLoading(true);
-    try {
-      const emp: Employee = {
-        id: editingId ?? generateId(),
-        name: form.name.trim(),
-        position: form.position.trim(),
-        phone: form.phone.trim(),
-        salary: parseFloat(form.salary) || 0,
-        joinDate: form.joinDate,
-        notes: form.notes.trim(),
-      };
-      if (editingId) {
-        await updateEmployee(emp);
-      } else {
-        await addEmployee(emp);
-      }
-      closeModal();
-    } catch {
-      alert('حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setLoading(false);
-    }
+    const emp: Employee = {
+      id: editingId ?? generateId(),
+      name: form.name.trim(),
+      position: form.position.trim(),
+      phone: form.phone.trim(),
+      salary: parseFloat(form.salary) || 0,
+      joinDate: form.joinDate,
+      notes: form.notes.trim(),
+    };
+    closeModal();
+    if (editingId) updateEmployee(emp);
+    else addEmployee(emp);
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return;
-    setLoading(true);
-    try {
-      await removeEmployee(deleteTarget.id);
-      setDeleteTarget(null);
-    } catch {
-      alert('حدث خطأ أثناء الحذف. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setLoading(false);
-    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    removeEmployee(target.id);
   }
 
   const columns = [
@@ -219,17 +203,15 @@ export default function Employees() {
           <div className="flex gap-3 justify-end mt-6">
             <button
               onClick={closeModal}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
             >
               إلغاء
             </button>
             <button
               onClick={handleSubmit}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors"
             >
-              {loading ? 'جارٍ الحفظ...' : editingId ? 'حفظ التعديلات' : 'إضافة'}
+              {editingId ? 'حفظ التعديلات' : 'إضافة'}
             </button>
           </div>
         </Modal>

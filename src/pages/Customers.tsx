@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import type { Customer } from '../types';
 import { generateId } from '../utils/hash';
+import { toStr } from '../utils/form';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
@@ -27,7 +28,6 @@ export default function Customers() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<FormState>>({});
-  const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
 
   const filtered = useMemo(() => {
@@ -52,12 +52,12 @@ export default function Customers() {
   function openEdit(customer: Customer) {
     setEditingId(customer.id);
     setForm({
-      name: customer.name ?? '',
-      phone: customer.phone ?? '',
-      email: customer.email ?? '',
-      address: customer.address ?? '',
-      balance: String(customer.balance ?? 0),
-      notes: customer.notes ?? '',
+      name: toStr(customer.name),
+      phone: toStr(customer.phone),
+      email: toStr(customer.email),
+      address: toStr(customer.address),
+      balance: toStr(customer.balance ?? 0),
+      notes: toStr(customer.notes),
     });
     setErrors({});
     setModalOpen(true);
@@ -82,43 +82,27 @@ export default function Customers() {
     return Object.keys(newErrors).length === 0;
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!validate()) return;
-    setLoading(true);
-    try {
-      const customer: Customer = {
-        id: editingId ?? generateId(),
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        address: form.address.trim(),
-        balance: parseFloat(form.balance) || 0,
-        notes: form.notes.trim(),
-      };
-      if (editingId) {
-        await updateCustomer(customer);
-      } else {
-        await addCustomer(customer);
-      }
-      closeModal();
-    } catch {
-      alert('حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setLoading(false);
-    }
+    const customer: Customer = {
+      id: editingId ?? generateId(),
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      address: form.address.trim(),
+      balance: parseFloat(form.balance) || 0,
+      notes: form.notes.trim(),
+    };
+    closeModal();
+    if (editingId) updateCustomer(customer);
+    else addCustomer(customer);
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return;
-    setLoading(true);
-    try {
-      await removeCustomer(deleteTarget.id);
-      setDeleteTarget(null);
-    } catch {
-      alert('حدث خطأ أثناء الحذف. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setLoading(false);
-    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    removeCustomer(target.id);
   }
 
   const columns = [
@@ -236,17 +220,15 @@ export default function Customers() {
           <div className="flex gap-3 justify-end mt-6">
             <button
               onClick={closeModal}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
             >
               إلغاء
             </button>
             <button
               onClick={handleSubmit}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors"
             >
-              {loading ? 'جارٍ الحفظ...' : editingId ? 'حفظ التعديلات' : 'إضافة'}
+              {editingId ? 'حفظ التعديلات' : 'إضافة'}
             </button>
           </div>
         </Modal>

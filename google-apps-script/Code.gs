@@ -23,6 +23,7 @@ var SHEET_HEADERS = {
   suppliers:  ['id', 'name', 'phone', 'email', 'address', 'balance', 'notes'],
   purchases:  ['id', 'supplierId', 'supplierName', 'date', 'items', 'totalAmount', 'paidAmount', 'notes'],
   sales:      ['id', 'customerId', 'customerName', 'date', 'items', 'totalAmount', 'paidAmount', 'notes'],
+  expenses:   ['id', 'title', 'amount', 'date', 'category', 'paymentMethod', 'supplierId', 'supplierName', 'notes'],
   users:      ['id', 'email', 'password', 'name', 'role']
 };
 
@@ -56,7 +57,7 @@ function sheetToObjects(sheet) {
         try { val = JSON.parse(val); } catch(e) { val = []; }
       }
       // Parse numbers
-      if ((h === 'salary' || h === 'balance' || h === 'totalAmount' || h === 'paidAmount') && val !== '') {
+      if ((h === 'salary' || h === 'balance' || h === 'totalAmount' || h === 'paidAmount' || h === 'amount') && val !== '') {
         val = Number(val) || 0;
       }
       obj[h] = val;

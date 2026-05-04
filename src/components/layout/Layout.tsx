@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
   '/suppliers':  'الموردون',
   '/purchases':  'المشتريات',
   '/sales':      'المبيعات',
+  '/expenses':   'المصروفات',
 };
 
 export default function Layout() {

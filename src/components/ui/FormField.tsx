@@ -21,10 +21,28 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean;
 }
 
-export function Input({ error, className = '', ...props }: InputProps) {
+const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+function convertArabic(str: string): string {
+  return str.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String(ARABIC_DIGITS.indexOf(d)));
+}
+
+export function Input({ error, className = '', onChange, ...props }: InputProps) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (onChange) {
+      const converted = convertArabic(e.target.value);
+      if (converted !== e.target.value) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value'
+        )?.set;
+        if (nativeSetter) nativeSetter.call(e.target, converted);
+      }
+      onChange(e);
+    }
+  }
   return (
     <input
       {...props}
+      onChange={handleChange}
       className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${
         error ? 'border-red-400' : 'border-gray-300'
       } ${className}`}

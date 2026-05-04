@@ -12,19 +12,22 @@
  * 8. Paste that URL into src/services/config.ts in the frontend
  *
  * SHEET SETUP: Create a Google Sheet with these tabs (exact names):
- *   employees, customers, suppliers, purchases, sales, users
+ *   employees, customers, suppliers, purchases, sales, expenses, users,
+ *   supplier_payments, customer_payments
  *
  * Each sheet will be auto-initialized with headers on first use.
  */
 
 var SHEET_HEADERS = {
-  employees: ['id', 'name', 'position', 'phone', 'salary', 'joinDate', 'notes'],
-  customers:  ['id', 'name', 'phone', 'email', 'address', 'balance', 'notes'],
-  suppliers:  ['id', 'name', 'phone', 'email', 'address', 'balance', 'notes'],
-  purchases:  ['id', 'supplierId', 'supplierName', 'date', 'items', 'totalAmount', 'paidAmount', 'notes'],
-  sales:      ['id', 'customerId', 'customerName', 'date', 'items', 'totalAmount', 'paidAmount', 'notes'],
-  expenses:   ['id', 'title', 'amount', 'date', 'category', 'paymentMethod', 'supplierId', 'supplierName', 'notes'],
-  users:      ['id', 'email', 'password', 'name', 'role']
+  employees:        ['id', 'name', 'position', 'phone', 'salary', 'joinDate', 'notes'],
+  customers:        ['id', 'name', 'phone', 'email', 'address', 'balance', 'notes'],
+  suppliers:        ['id', 'name', 'phone', 'email', 'address', 'balance', 'notes'],
+  purchases:        ['id', 'supplierId', 'supplierName', 'date', 'items', 'discountType', 'discountValue', 'discountAmount', 'totalAmount', 'paymentType', 'paidAmount', 'notes'],
+  sales:            ['id', 'customerId', 'customerName', 'date', 'items', 'discountType', 'discountValue', 'discountAmount', 'totalAmount', 'paymentType', 'paidAmount', 'notes'],
+  expenses:         ['id', 'title', 'amount', 'date', 'category', 'paymentMethod', 'supplierId', 'supplierName', 'notes'],
+  users:            ['id', 'email', 'password', 'name', 'role'],
+  supplier_payments: ['id', 'supplierId', 'amount', 'type', 'relatedPurchaseId', 'date', 'notes'],
+  customer_payments: ['id', 'customerId', 'amount', 'type', 'relatedSaleId',     'date', 'notes']
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -57,7 +60,8 @@ function sheetToObjects(sheet) {
         try { val = JSON.parse(val); } catch(e) { val = []; }
       }
       // Parse numbers
-      if ((h === 'salary' || h === 'balance' || h === 'totalAmount' || h === 'paidAmount' || h === 'amount') && val !== '') {
+      if ((h === 'salary' || h === 'balance' || h === 'totalAmount' || h === 'paidAmount' ||
+           h === 'amount' || h === 'discountValue' || h === 'discountAmount') && val !== '') {
         val = Number(val) || 0;
       }
       obj[h] = val;

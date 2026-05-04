@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import type { Expense } from '../types';
@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
+import FilterBar, { type FilterField } from '../components/ui/FilterBar';
 
 const EXPENSE_CATEGORIES = [
   'رواتب', 'إيجار', 'كهرباء', 'مياه', 'هاتف/إنترنت',
@@ -17,24 +18,33 @@ const EXPENSE_CATEGORIES = [
 const PAYMENT_METHODS = [
   { value: 'cash',   label: 'نقد',  activeClass: 'bg-emerald-600 text-white', badgeClass: 'bg-emerald-100 text-emerald-700' },
   { value: 'bank',   label: 'بنك',  activeClass: 'bg-blue-600 text-white',    badgeClass: 'bg-blue-100 text-blue-700' },
-  { value: 'credit', label: 'آجل', activeClass: 'bg-orange-500 text-white',  badgeClass: 'bg-orange-100 text-orange-700' },
+  { value: 'credit', label: 'آجل',  activeClass: 'bg-orange-500 text-white',  badgeClass: 'bg-orange-100 text-orange-700' },
 ] as const;
 
 const today = new Date().toISOString().split('T')[0];
 
 const EMPTY_FORM = {
-  title: '',
-  amount: 0,
-  date: today,
-  category: 'أخرى',
+  title:         '',
+  amount:        0,
+  date:          today,
+  category:      'أخرى',
   paymentMethod: 'cash' as 'cash' | 'bank' | 'credit',
-  supplierId: '',
-  supplierName: '',
-  notes: '',
+  supplierId:    '',
+  supplierName:  '',
+  notes:         '',
+};
+
+const EMPTY_FILTERS: Record<string, string> = {
+  search:        '',
+  dateFrom:      '',
+  dateTo:        '',
+  category:      '',
+  paymentMethod: '',
+  supplierId:    '',
 };
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 function pmBadge(pm: string) {
   return PAYMENT_METHODS.find(p => p.value === pm) ?? PAYMENT_METHODS[0];
@@ -54,32 +64,50 @@ export default function Expenses() {
   const { expenses, suppliers, addExpense, updateExpense, removeExpense } = useData();
   const toast = useToast();
 
-  const [search, setSearch]               = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterPayment, setFilterPayment]   = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo]     = useState('');
-  const [form, setForm]                   = useState(EMPTY_FORM);
-  const [editingId, setEditingId]         = useState<string | null>(null);
-  const [showModal, setShowModal]         = useState(false);
-  const [deleteTarget, setDeleteTarget]   = useState<Expense | null>(null);
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const [filters, setFilters] = useState<Record<string, string>>(EMPTY_FILTERS);
+
+  const filterConfig: FilterField[] = useMemo(() => [
+    { key: 'search',        type: 'search',    placeholder: 'بحث بالمصروف...' },
+    { key: 'dateFrom',      type: 'date-from' },
+    { key: 'dateTo',        type: 'date-to' },
+    { key: 'category',      type: 'select',    allLabel: 'كل الفئات',
+      options: EXPENSE_CATEGORIES.map(c => ({ value: c, label: c })) },
+    { key: 'paymentMethod', type: 'segmented', options: [
+      { value: '',       label: 'الكل' },
+      { value: 'cash',   label: 'نقد' },
+      { value: 'bank',   label: 'بنك' },
+      { value: 'credit', label: 'آجل' },
+    ]},
+    { key: 'supplierId', type: 'select', allLabel: 'كل الموردين',
+      options: suppliers.map(s => ({ value: s.id, label: s.name })) },
+  ], [suppliers]);
 
   const filtered = useMemo(() =>
     expenses.filter(e => {
-      if (search && !e.title.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterCategory && e.category !== filterCategory) return false;
-      if (filterPayment  && e.paymentMethod !== filterPayment) return false;
-      if (filterDateFrom && e.date < filterDateFrom) return false;
-      if (filterDateTo   && e.date > filterDateTo)   return false;
+      const q = filters.search.toLowerCase();
+      if (q && !e.title.toLowerCase().includes(q)) return false;
+      if (filters.category      && e.category      !== filters.category)      return false;
+      if (filters.paymentMethod && e.paymentMethod !== filters.paymentMethod) return false;
+      if (filters.dateFrom      && e.date < filters.dateFrom) return false;
+      if (filters.dateTo        && e.date > filters.dateTo)   return false;
+      if (filters.supplierId    && e.supplierId    !== filters.supplierId)    return false;
       return true;
     }),
-    [expenses, search, filterCategory, filterPayment, filterDateFrom, filterDateTo]
+    [expenses, filters],
   );
 
+  // ── Summary stats (always from full dataset, not filtered) ────────────────
   const totalAll    = useMemo(() => expenses.reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
   const totalPaid   = useMemo(() => expenses.filter(e => e.paymentMethod !== 'credit').reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
   const totalCredit = useMemo(() => expenses.filter(e => e.paymentMethod === 'credit').reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
   const todayTotal  = useMemo(() => expenses.filter(e => e.date === today).reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+  const [form, setForm]           = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
 
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, date: new Date().toISOString().split('T')[0] });
@@ -89,14 +117,14 @@ export default function Expenses() {
 
   const openEdit = (e: Expense) => {
     setForm({
-      title: e.title,
-      amount: e.amount,
-      date: e.date,
-      category: e.category || 'أخرى',
+      title:         e.title,
+      amount:        e.amount,
+      date:          e.date,
+      category:      e.category || 'أخرى',
       paymentMethod: e.paymentMethod,
-      supplierId: e.supplierId ?? '',
-      supplierName: e.supplierName ?? '',
-      notes: e.notes,
+      supplierId:    e.supplierId ?? '',
+      supplierName:  e.supplierName ?? '',
+      notes:         e.notes,
     });
     setEditingId(e.id);
     setShowModal(true);
@@ -110,22 +138,22 @@ export default function Expenses() {
   };
 
   const handleSubmit = () => {
-    if (!form.title.trim())              { toast.error('يرجى إدخال اسم المصروف'); return; }
+    if (!form.title.trim())               { toast.error('يرجى إدخال اسم المصروف'); return; }
     if (!form.amount || form.amount <= 0) { toast.error('يرجى إدخال مبلغ صحيح أكبر من صفر'); return; }
     const expense: Expense = {
-      id: editingId ?? generateId(),
-      title: form.title.trim(),
-      amount: parseFloat(String(form.amount)) || 0,
-      date: form.date,
-      category: form.category,
+      id:            editingId ?? generateId(),
+      title:         form.title.trim(),
+      amount:        parseFloat(String(form.amount)) || 0,
+      date:          form.date,
+      category:      form.category,
       paymentMethod: form.paymentMethod,
-      supplierId: form.supplierId,
-      supplierName: form.supplierName,
-      notes: form.notes,
+      supplierId:    form.supplierId,
+      supplierName:  form.supplierName,
+      notes:         form.notes,
     };
     closeModal();
     if (editingId) updateExpense(expense);
-    else addExpense(expense);
+    else           addExpense(expense);
   };
 
   const handleDelete = () => {
@@ -135,8 +163,6 @@ export default function Expenses() {
     removeExpense(target.id);
   };
 
-  const hasFilters = filterCategory || filterPayment || filterDateFrom || filterDateTo;
-
   const columns = [
     { key: 'title', label: 'المصروف' },
     {
@@ -144,7 +170,7 @@ export default function Expenses() {
       label: 'المبلغ',
       render: (e: Expense) => <span className="font-semibold text-gray-800">{fmt(e.amount)} ₪</span>,
     },
-    { key: 'date', label: 'التاريخ' },
+    { key: 'date',     label: 'التاريخ' },
     { key: 'category', label: 'الفئة' },
     {
       key: 'paymentMethod',
@@ -174,7 +200,7 @@ export default function Expenses() {
         <SummaryCard title="إجمالي المصروفات" value={fmt(totalAll)}    colorBg="bg-red-50"     colorText="text-red-600" />
         <SummaryCard title="مدفوع (نقد/بنك)"  value={fmt(totalPaid)}   colorBg="bg-emerald-50" colorText="text-emerald-600" />
         <SummaryCard title="آجل غير مدفوع"    value={fmt(totalCredit)} colorBg="bg-orange-50"  colorText="text-orange-600" />
-        <SummaryCard title="مصروفات اليوم"     value={fmt(todayTotal)}  colorBg="bg-blue-50"    colorText="text-blue-600" />
+        <SummaryCard title="مصروفات اليوم"    value={fmt(todayTotal)}  colorBg="bg-blue-50"    colorText="text-blue-600" />
       </div>
 
       <PageHeader
@@ -182,50 +208,16 @@ export default function Expenses() {
         count={filtered.length}
         onAdd={openAdd}
         addLabel="إضافة مصروف"
-        search={search}
-        onSearch={setSearch}
       />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <input
-          type="date"
-          value={filterDateFrom}
-          onChange={e => setFilterDateFrom(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        />
-        <span className="text-xs text-gray-400">إلى</span>
-        <input
-          type="date"
-          value={filterDateTo}
-          onChange={e => setFilterDateTo(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        />
-        <select
-          value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        >
-          <option value="">كل الفئات</option>
-          {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select
-          value={filterPayment}
-          onChange={e => setFilterPayment(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        >
-          <option value="">كل طرق الدفع</option>
-          {PAYMENT_METHODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-        </select>
-        {hasFilters && (
-          <button
-            onClick={() => { setFilterCategory(''); setFilterPayment(''); setFilterDateFrom(''); setFilterDateTo(''); }}
-            className="text-sm text-red-500 hover:underline"
-          >
-            مسح الفلاتر
-          </button>
-        )}
-      </div>
+      <FilterBar
+        config={filterConfig}
+        values={filters}
+        onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+        onReset={() => setFilters(EMPTY_FILTERS)}
+        resultCount={filtered.length}
+        totalCount={expenses.length}
+      />
 
       <Table
         columns={columns}
@@ -248,9 +240,7 @@ export default function Expenses() {
               </FormField>
               <FormField label="المبلغ" required>
                 <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
                   inputMode="decimal"
                   value={form.amount || ''}
                   onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}

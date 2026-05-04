@@ -11,6 +11,8 @@ import Suppliers from './pages/Suppliers';
 import Purchases from './pages/Purchases';
 import Sales from './pages/Sales';
 import Expenses from './pages/Expenses';
+import CustomerStatement from './pages/CustomerStatement';
+import SupplierStatement from './pages/SupplierStatement';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -41,8 +43,10 @@ function AppRoutes() {
         <Route element={<Layout />}>
           <Route path="/"           element={<Dashboard />} />
           <Route path="/employees"  element={<Employees />} />
-          <Route path="/customers"  element={<Customers />} />
-          <Route path="/suppliers"  element={<Suppliers />} />
+          <Route path="/customers"              element={<Customers />} />
+          <Route path="/customers/:id/statement" element={<CustomerStatement />} />
+          <Route path="/suppliers"               element={<Suppliers />} />
+          <Route path="/suppliers/:id/statement" element={<SupplierStatement />} />
           <Route path="/purchases"  element={<Purchases />} />
           <Route path="/sales"      element={<Sales />} />
           <Route path="/expenses"   element={<Expenses />} />

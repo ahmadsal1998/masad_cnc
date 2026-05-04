@@ -1,10 +1,14 @@
 import React, {
   createContext, useContext, useState, useCallback, useRef, useEffect,
 } from 'react';
-import type { Employee, Customer, Supplier, Purchase, Sale, Expense, SyncStatus } from '../types';
+import type {
+  Employee, Customer, Supplier, Purchase, Sale, Expense,
+  SupplierPayment, CustomerPayment, SyncStatus,
+} from '../types';
 import { fetchSheet, insertRecord, updateRecord, deleteRecord } from '../services/googleSheets';
 import { SHEETS } from '../services/config';
 import { useToast } from './ToastContext';
+import { generateId } from '../utils/hash';
 
 interface DataContextValue {
   employees: Employee[];
@@ -12,6 +16,9 @@ interface DataContextValue {
   suppliers: Supplier[];
   purchases: Purchase[];
   sales: Sale[];
+  expenses: Expense[];
+  supplierPayments: SupplierPayment[];
+  customerPayments: CustomerPayment[];
   syncStatus: SyncStatus;
   loadAll: () => Promise<void>;
   addEmployee: (e: Employee) => void;
@@ -29,53 +36,63 @@ interface DataContextValue {
   addSale: (s: Sale) => void;
   updateSale: (s: Sale) => void;
   removeSale: (id: string) => void;
-  expenses: Expense[];
   addExpense: (e: Expense) => void;
   updateExpense: (e: Expense) => void;
   removeExpense: (id: string) => void;
+  addSupplierPayment: (p: SupplierPayment) => void;
+  updateSupplierPayment: (p: SupplierPayment) => void;
+  removeSupplierPayment: (id: string) => void;
+  addCustomerPayment: (p: CustomerPayment) => void;
+  updateCustomerPayment: (p: CustomerPayment) => void;
+  removeCustomerPayment: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
 
-const owed = (total: number, paid: number) => (total ?? 0) - (paid ?? 0);
-
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const toast = useToast();
 
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ loading: false, error: null, lastSync: null });
+  const [employees, setEmployees]             = useState<Employee[]>([]);
+  const [customers, setCustomers]             = useState<Customer[]>([]);
+  const [suppliers, setSuppliers]             = useState<Supplier[]>([]);
+  const [purchases, setPurchases]             = useState<Purchase[]>([]);
+  const [sales, setSales]                     = useState<Sale[]>([]);
+  const [expenses, setExpenses]               = useState<Expense[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
+  const [syncStatus, setSyncStatus]           = useState<SyncStatus>({ loading: false, error: null, lastSync: null });
 
-  // Refs always hold the latest slice of state — safe to read before async operations
-  const employeesRef = useRef<Employee[]>([]);
-  const customersRef = useRef<Customer[]>([]);
-  const suppliersRef = useRef<Supplier[]>([]);
-  const purchasesRef = useRef<Purchase[]>([]);
-  const salesRef     = useRef<Sale[]>([]);
-  const expensesRef  = useRef<Expense[]>([]);
+  const employeesRef        = useRef<Employee[]>([]);
+  const customersRef        = useRef<Customer[]>([]);
+  const suppliersRef        = useRef<Supplier[]>([]);
+  const purchasesRef        = useRef<Purchase[]>([]);
+  const salesRef            = useRef<Sale[]>([]);
+  const expensesRef         = useRef<Expense[]>([]);
+  const supplierPaymentsRef = useRef<SupplierPayment[]>([]);
+  const customerPaymentsRef = useRef<CustomerPayment[]>([]);
 
-  useEffect(() => { employeesRef.current = employees; }, [employees]);
-  useEffect(() => { customersRef.current = customers;  }, [customers]);
-  useEffect(() => { suppliersRef.current = suppliers;  }, [suppliers]);
-  useEffect(() => { purchasesRef.current = purchases;  }, [purchases]);
-  useEffect(() => { salesRef.current     = sales;      }, [sales]);
-  useEffect(() => { expensesRef.current  = expenses;   }, [expenses]);
+  useEffect(() => { employeesRef.current        = employees;        }, [employees]);
+  useEffect(() => { customersRef.current        = customers;        }, [customers]);
+  useEffect(() => { suppliersRef.current        = suppliers;        }, [suppliers]);
+  useEffect(() => { purchasesRef.current        = purchases;        }, [purchases]);
+  useEffect(() => { salesRef.current            = sales;            }, [sales]);
+  useEffect(() => { expensesRef.current         = expenses;         }, [expenses]);
+  useEffect(() => { supplierPaymentsRef.current = supplierPayments; }, [supplierPayments]);
+  useEffect(() => { customerPaymentsRef.current = customerPayments; }, [customerPayments]);
 
   // ── Load all ────────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setSyncStatus(s => ({ ...s, loading: true, error: null }));
     try {
-      const [emps, custs, sups, purs, sls, exps] = await Promise.all([
+      const [emps, custs, sups, purs, sls, exps, spays, cpays] = await Promise.all([
         fetchSheet<Employee>(SHEETS.EMPLOYEES),
         fetchSheet<Customer>(SHEETS.CUSTOMERS),
         fetchSheet<Supplier>(SHEETS.SUPPLIERS),
         fetchSheet<Purchase>(SHEETS.PURCHASES),
         fetchSheet<Sale>(SHEETS.SALES),
         fetchSheet<Expense>(SHEETS.EXPENSES),
+        fetchSheet<SupplierPayment>(SHEETS.SUPPLIER_PAYMENTS),
+        fetchSheet<CustomerPayment>(SHEETS.CUSTOMER_PAYMENTS),
       ]);
       setEmployees(emps);
       setCustomers(custs);
@@ -83,6 +100,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setPurchases(purs);
       setSales(sls);
       setExpenses(exps);
+      setSupplierPayments(spays);
+      setCustomerPayments(cpays);
       setSyncStatus({ loading: false, error: null, lastSync: new Date() });
     } catch (err) {
       setSyncStatus(s => ({ ...s, loading: false, error: (err as Error).message }));
@@ -151,13 +170,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const removeCustomer = useCallback((id: string) => {
     const old = customersRef.current.find(x => x.id === id);
+    const relatedPayments = customerPaymentsRef.current.filter(x => x.customerId === id);
+
     setCustomers(prev => prev.filter(x => x.id !== id));
+    setCustomerPayments(prev => prev.filter(x => x.customerId !== id));
     toast.success('تم حذف العميل بنجاح');
-    deleteRecord(SHEETS.CUSTOMERS, id).then(onSyncOk).catch(err => {
-      if (old) setCustomers(prev => [...prev, old]);
-      toast.error('فشل حذف العميل. يرجى المحاولة مرة أخرى.');
-      onSyncErr(err);
-    });
+
+    (async () => {
+      try {
+        await deleteRecord(SHEETS.CUSTOMERS, id);
+        await Promise.all(relatedPayments.map(p => deleteRecord(SHEETS.CUSTOMER_PAYMENTS, p.id)));
+        onSyncOk();
+      } catch (err) {
+        if (old) setCustomers(prev => [...prev, old]);
+        if (relatedPayments.length > 0) setCustomerPayments(prev => [...prev, ...relatedPayments]);
+        toast.error('فشل حذف العميل. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
   }, [toast]);
 
   // ── Suppliers ───────────────────────────────────────────────────────────────
@@ -184,36 +214,62 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const removeSupplier = useCallback((id: string) => {
     const old = suppliersRef.current.find(x => x.id === id);
+    const relatedPayments = supplierPaymentsRef.current.filter(x => x.supplierId === id);
+
     setSuppliers(prev => prev.filter(x => x.id !== id));
+    setSupplierPayments(prev => prev.filter(x => x.supplierId !== id));
     toast.success('تم حذف المورد بنجاح');
-    deleteRecord(SHEETS.SUPPLIERS, id).then(onSyncOk).catch(err => {
-      if (old) setSuppliers(prev => [...prev, old]);
-      toast.error('فشل حذف المورد. يرجى المحاولة مرة أخرى.');
-      onSyncErr(err);
-    });
+
+    (async () => {
+      try {
+        await deleteRecord(SHEETS.SUPPLIERS, id);
+        await Promise.all(relatedPayments.map(p => deleteRecord(SHEETS.SUPPLIER_PAYMENTS, p.id)));
+        onSyncOk();
+      } catch (err) {
+        if (old) setSuppliers(prev => [...prev, old]);
+        if (relatedPayments.length > 0) setSupplierPayments(prev => [...prev, ...relatedPayments]);
+        toast.error('فشل حذف المورد. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
   }, [toast]);
 
-  // ── Purchases → Supplier balance ─────────────────────────────────────────────
-  const addPurchase = useCallback((p: Purchase) => {
-    const delta    = owed(p.totalAmount, p.paidAmount);
-    const oldSup   = suppliersRef.current.find(s => s.id === p.supplierId);
-    const newSupBal = (oldSup?.balance ?? 0) + delta;
+  // ── Purchases → Supplier balance + SupplierPayments ─────────────────────────
+  //
+  // Balance semantics: supplier.balance tracks total amount owed.
+  //   - Any purchase (cash or credit) adds the full totalAmount to balance.
+  //   - A cash purchase also auto-creates a SupplierPayment record to document
+  //     that the money was paid immediately.
+  //   - Standalone payments (addSupplierPayment) reduce the balance.
 
-    // Optimistic
+  const addPurchase = useCallback((p: Purchase) => {
+    const oldSup    = suppliersRef.current.find(s => s.id === p.supplierId);
+    const pPaidAmt  = p.paymentType === 'credit' ? (p.paidAmount ?? 0) : 0;
+    const pBal      = p.paymentType === 'cash' ? p.totalAmount : (p.totalAmount - pPaidAmt);
+    const newSupBal = (oldSup?.balance ?? 0) + pBal;
+
+    const autoPayment: SupplierPayment | null =
+      p.paymentType === 'cash'
+        ? { id: generateId(), supplierId: p.supplierId, amount: p.totalAmount, type: 'cash', relatedPurchaseId: p.id, date: p.date }
+        : pPaidAmt > 0
+          ? { id: generateId(), supplierId: p.supplierId, amount: pPaidAmt, type: 'cash', relatedPurchaseId: p.id, date: p.date }
+          : null;
+
     setPurchases(prev => [...prev, p]);
-    if (delta !== 0 && oldSup)
+    if (autoPayment) setSupplierPayments(prev => [...prev, autoPayment]);
+    if (oldSup)
       setSuppliers(prev => prev.map(s => s.id === p.supplierId ? { ...s, balance: newSupBal } : s));
     toast.success('تمت إضافة فاتورة الشراء بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await insertRecord(SHEETS.PURCHASES, p);
-        if (delta !== 0 && oldSup)
-          await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
+        if (autoPayment) await insertRecord(SHEETS.SUPPLIER_PAYMENTS, autoPayment);
+        if (oldSup) await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
         onSyncOk();
       } catch (err) {
         setPurchases(prev => prev.filter(x => x.id !== p.id));
+        if (autoPayment) setSupplierPayments(prev => prev.filter(x => x.id !== autoPayment.id));
         if (oldSup) setSuppliers(prev => prev.map(s => s.id === p.supplierId ? oldSup : s));
         toast.error('فشلت إضافة فاتورة الشراء. يرجى المحاولة مرة أخرى.');
         onSyncErr(err);
@@ -222,54 +278,84 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   const updatePurchase = useCallback((p: Purchase) => {
-    const oldP      = purchasesRef.current.find(x => x.id === p.id);
+    const oldP = purchasesRef.current.find(x => x.id === p.id);
     if (!oldP) return;
 
-    const oldDelta   = owed(oldP.totalAmount, oldP.paidAmount);
-    const newDelta   = owed(p.totalAmount,    p.paidAmount);
-    const sameSup    = oldP.supplierId === p.supplierId;
-    const oldSupA    = suppliersRef.current.find(s => s.id === oldP.supplierId);
-    const oldSupB    = sameSup ? oldSupA : suppliersRef.current.find(s => s.id === p.supplierId);
+    const sameSup  = oldP.supplierId === p.supplierId;
+    const oldSupA  = suppliersRef.current.find(s => s.id === oldP.supplierId);
+    const oldSupB  = sameSup ? oldSupA : suppliersRef.current.find(s => s.id === p.supplierId);
+    const existingPayment = supplierPaymentsRef.current.find(x => x.relatedPurchaseId === p.id);
 
-    // Optimistic purchase update
+    let newPayment:     SupplierPayment | null = null;
+    let updatedPayment: SupplierPayment | null = null;
+    let deletedPayment: SupplierPayment | null = null;
+
+    const newPPaidAmt = p.paymentType === 'credit' ? (p.paidAmount ?? 0) : 0;
+    if (p.paymentType === 'cash') {
+      if (existingPayment) {
+        updatedPayment = { ...existingPayment, amount: p.totalAmount, supplierId: p.supplierId, date: p.date };
+      } else {
+        newPayment = { id: generateId(), supplierId: p.supplierId, amount: p.totalAmount, type: 'cash', relatedPurchaseId: p.id, date: p.date };
+      }
+    } else if (newPPaidAmt > 0) {
+      if (existingPayment) {
+        updatedPayment = { ...existingPayment, amount: newPPaidAmt, supplierId: p.supplierId, date: p.date };
+      } else {
+        newPayment = { id: generateId(), supplierId: p.supplierId, amount: newPPaidAmt, type: 'cash', relatedPurchaseId: p.id, date: p.date };
+      }
+    } else {
+      if (existingPayment) deletedPayment = existingPayment;
+    }
+
+    const oldPPaid   = oldP.paymentType === 'credit' ? (oldP.paidAmount ?? 0) : 0;
+    const oldPImpact = oldP.paymentType === 'cash' ? oldP.totalAmount : (oldP.totalAmount - oldPPaid);
+    const newPImpact = p.paymentType === 'cash' ? p.totalAmount : (p.totalAmount - newPPaidAmt);
+
     setPurchases(prev => prev.map(x => x.id === p.id ? p : x));
+    if (newPayment)     setSupplierPayments(prev => [...prev, newPayment!]);
+    if (updatedPayment) setSupplierPayments(prev => prev.map(x => x.id === updatedPayment!.id ? updatedPayment! : x));
+    if (deletedPayment) setSupplierPayments(prev => prev.filter(x => x.id !== deletedPayment!.id));
 
-    // Optimistic supplier balance updates
     if (sameSup) {
-      const net = newDelta - oldDelta;
+      const net = newPImpact - oldPImpact;
       if (net !== 0 && oldSupA)
         setSuppliers(prev => prev.map(s =>
           s.id === p.supplierId ? { ...s, balance: (oldSupA.balance ?? 0) + net } : s
         ));
     } else {
-      if (oldDelta !== 0 && oldSupA)
+      if (oldSupA)
         setSuppliers(prev => prev.map(s =>
-          s.id === oldP.supplierId ? { ...s, balance: (oldSupA.balance ?? 0) - oldDelta } : s
+          s.id === oldP.supplierId ? { ...s, balance: (oldSupA.balance ?? 0) - oldPImpact } : s
         ));
-      if (newDelta !== 0 && oldSupB)
+      if (oldSupB)
         setSuppliers(prev => prev.map(s =>
-          s.id === p.supplierId ? { ...s, balance: (oldSupB.balance ?? 0) + newDelta } : s
+          s.id === p.supplierId ? { ...s, balance: (oldSupB.balance ?? 0) + newPImpact } : s
         ));
     }
     toast.success('تم تحديث فاتورة الشراء بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await updateRecord(SHEETS.PURCHASES, p);
+        if (newPayment)     await insertRecord(SHEETS.SUPPLIER_PAYMENTS, newPayment);
+        if (updatedPayment) await updateRecord(SHEETS.SUPPLIER_PAYMENTS, updatedPayment);
+        if (deletedPayment) await deleteRecord(SHEETS.SUPPLIER_PAYMENTS, deletedPayment.id);
         if (sameSup) {
-          const net = newDelta - oldDelta;
+          const net = newPImpact - oldPImpact;
           if (net !== 0 && oldSupA)
             await updateRecord(SHEETS.SUPPLIERS, { ...oldSupA, balance: (oldSupA.balance ?? 0) + net });
         } else {
-          if (oldDelta !== 0 && oldSupA)
-            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupA, balance: (oldSupA.balance ?? 0) - oldDelta });
-          if (newDelta !== 0 && oldSupB)
-            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupB, balance: (oldSupB.balance ?? 0) + newDelta });
+          if (oldSupA)
+            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupA, balance: (oldSupA.balance ?? 0) - oldPImpact });
+          if (oldSupB)
+            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupB, balance: (oldSupB.balance ?? 0) + newPImpact });
         }
         onSyncOk();
       } catch (err) {
         setPurchases(prev => prev.map(x => x.id === p.id ? oldP : x));
+        if (newPayment)                       setSupplierPayments(prev => prev.filter(x => x.id !== newPayment!.id));
+        if (updatedPayment && existingPayment) setSupplierPayments(prev => prev.map(x => x.id === updatedPayment!.id ? existingPayment : x));
+        if (deletedPayment)                   setSupplierPayments(prev => [...prev, deletedPayment!]);
         if (oldSupA) setSuppliers(prev => prev.map(s => s.id === oldP.supplierId ? oldSupA : s));
         if (!sameSup && oldSupB) setSuppliers(prev => prev.map(s => s.id === p.supplierId ? oldSupB : s));
         toast.error('فشل تحديث فاتورة الشراء. يرجى المحاولة مرة أخرى.');
@@ -279,26 +365,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   const removePurchase = useCallback((id: string) => {
-    const oldP      = purchasesRef.current.find(x => x.id === id);
-    const oldSup    = oldP ? suppliersRef.current.find(s => s.id === oldP.supplierId) : undefined;
-    const delta     = oldP ? owed(oldP.totalAmount, oldP.paidAmount) : 0;
-    const newSupBal = (oldSup?.balance ?? 0) - delta;
+    const oldP    = purchasesRef.current.find(x => x.id === id);
+    const oldSup  = oldP ? suppliersRef.current.find(s => s.id === oldP.supplierId) : undefined;
+    const pPaid    = oldP?.paymentType === 'credit' ? (oldP?.paidAmount ?? 0) : 0;
+    const pImpact  = oldP?.paymentType === 'cash' ? (oldP?.totalAmount ?? 0) : ((oldP?.totalAmount ?? 0) - pPaid);
+    const newSupBal = (oldSup?.balance ?? 0) - pImpact;
+    const relatedPayment = supplierPaymentsRef.current.find(x => x.relatedPurchaseId === id);
 
-    // Optimistic
     setPurchases(prev => prev.filter(x => x.id !== id));
-    if (delta !== 0 && oldSup && oldP)
+    if (relatedPayment) setSupplierPayments(prev => prev.filter(x => x.id !== relatedPayment.id));
+    if (oldSup && oldP)
       setSuppliers(prev => prev.map(s => s.id === oldP.supplierId ? { ...s, balance: newSupBal } : s));
     toast.success('تم حذف فاتورة الشراء بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await deleteRecord(SHEETS.PURCHASES, id);
-        if (delta !== 0 && oldSup)
-          await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
+        if (relatedPayment) await deleteRecord(SHEETS.SUPPLIER_PAYMENTS, relatedPayment.id);
+        if (oldSup && oldP) await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
         onSyncOk();
       } catch (err) {
-        if (oldP) setPurchases(prev => [...prev, oldP]);
+        if (oldP)           setPurchases(prev => [...prev, oldP]);
+        if (relatedPayment) setSupplierPayments(prev => [...prev, relatedPayment]);
         if (oldSup && oldP) setSuppliers(prev => prev.map(s => s.id === oldP.supplierId ? oldSup : s));
         toast.error('فشل حذف فاتورة الشراء. يرجى المحاولة مرة أخرى.');
         onSyncErr(err);
@@ -306,27 +394,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [toast]);
 
-  // ── Sales → Customer balance ─────────────────────────────────────────────────
-  const addSale = useCallback((s: Sale) => {
-    const delta     = owed(s.totalAmount, s.paidAmount);
-    const oldCust   = customersRef.current.find(c => c.id === s.customerId);
-    const newCustBal = (oldCust?.balance ?? 0) + delta;
+  // ── Sales → Customer balance + CustomerPayments ──────────────────────────────
+  //
+  // Balance semantics: customer.balance tracks how much the customer owes us.
+  //   - Any sale (cash or credit) adds the full totalAmount to balance.
+  //   - A cash sale also auto-creates a CustomerPayment record to document
+  //     that the customer paid immediately.
+  //   - Standalone payments (addCustomerPayment) reduce the balance.
+  //
+  // Net balance: balance = totalSales - totalPayments
+  //   balance > 0 → customer still owes money
+  //   balance = 0 → fully settled
+  //   balance < 0 → customer overpaid
 
-    // Optimistic
+  const addSale = useCallback((s: Sale) => {
+    const oldCust    = customersRef.current.find(c => c.id === s.customerId);
+    const sPaidAmt   = s.paymentType === 'credit' ? (s.paidAmount ?? 0) : 0;
+    const sBal       = s.paymentType === 'cash' ? s.totalAmount : (s.totalAmount - sPaidAmt);
+    const newCustBal = (oldCust?.balance ?? 0) + sBal;
+
+    const autoPayment: CustomerPayment | null =
+      s.paymentType === 'cash'
+        ? { id: generateId(), customerId: s.customerId, amount: s.totalAmount, type: 'cash', relatedSaleId: s.id, date: s.date }
+        : sPaidAmt > 0
+          ? { id: generateId(), customerId: s.customerId, amount: sPaidAmt, type: 'cash', relatedSaleId: s.id, date: s.date }
+          : null;
+
     setSales(prev => [...prev, s]);
-    if (delta !== 0 && oldCust)
+    if (autoPayment) setCustomerPayments(prev => [...prev, autoPayment]);
+    if (oldCust)
       setCustomers(prev => prev.map(c => c.id === s.customerId ? { ...c, balance: newCustBal } : c));
     toast.success('تمت إضافة فاتورة البيع بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await insertRecord(SHEETS.SALES, s);
-        if (delta !== 0 && oldCust)
-          await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
+        if (autoPayment) await insertRecord(SHEETS.CUSTOMER_PAYMENTS, autoPayment);
+        if (oldCust) await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
         onSyncOk();
       } catch (err) {
         setSales(prev => prev.filter(x => x.id !== s.id));
+        if (autoPayment) setCustomerPayments(prev => prev.filter(x => x.id !== autoPayment.id));
         if (oldCust) setCustomers(prev => prev.map(c => c.id === s.customerId ? oldCust : c));
         toast.error('فشلت إضافة فاتورة البيع. يرجى المحاولة مرة أخرى.');
         onSyncErr(err);
@@ -335,54 +443,84 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   const updateSale = useCallback((s: Sale) => {
-    const oldS      = salesRef.current.find(x => x.id === s.id);
+    const oldS = salesRef.current.find(x => x.id === s.id);
     if (!oldS) return;
 
-    const oldDelta   = owed(oldS.totalAmount, oldS.paidAmount);
-    const newDelta   = owed(s.totalAmount,    s.paidAmount);
-    const sameCust   = oldS.customerId === s.customerId;
-    const oldCustA   = customersRef.current.find(c => c.id === oldS.customerId);
-    const oldCustB   = sameCust ? oldCustA : customersRef.current.find(c => c.id === s.customerId);
+    const sameCust  = oldS.customerId === s.customerId;
+    const oldCustA  = customersRef.current.find(c => c.id === oldS.customerId);
+    const oldCustB  = sameCust ? oldCustA : customersRef.current.find(c => c.id === s.customerId);
+    const existingPayment = customerPaymentsRef.current.find(x => x.relatedSaleId === s.id);
 
-    // Optimistic sale update
+    let newPayment:     CustomerPayment | null = null;
+    let updatedPayment: CustomerPayment | null = null;
+    let deletedPayment: CustomerPayment | null = null;
+
+    const newPaidAmt = s.paymentType === 'credit' ? (s.paidAmount ?? 0) : 0;
+    if (s.paymentType === 'cash') {
+      if (existingPayment) {
+        updatedPayment = { ...existingPayment, amount: s.totalAmount, customerId: s.customerId, date: s.date };
+      } else {
+        newPayment = { id: generateId(), customerId: s.customerId, amount: s.totalAmount, type: 'cash', relatedSaleId: s.id, date: s.date };
+      }
+    } else if (newPaidAmt > 0) {
+      if (existingPayment) {
+        updatedPayment = { ...existingPayment, amount: newPaidAmt, customerId: s.customerId, date: s.date };
+      } else {
+        newPayment = { id: generateId(), customerId: s.customerId, amount: newPaidAmt, type: 'cash', relatedSaleId: s.id, date: s.date };
+      }
+    } else {
+      if (existingPayment) deletedPayment = existingPayment;
+    }
+
+    const oldPaid   = oldS.paymentType === 'credit' ? (oldS.paidAmount ?? 0) : 0;
+    const oldImpact = oldS.paymentType === 'cash' ? oldS.totalAmount : (oldS.totalAmount - oldPaid);
+    const newImpact = s.paymentType === 'cash' ? s.totalAmount : (s.totalAmount - newPaidAmt);
+
     setSales(prev => prev.map(x => x.id === s.id ? s : x));
+    if (newPayment)     setCustomerPayments(prev => [...prev, newPayment!]);
+    if (updatedPayment) setCustomerPayments(prev => prev.map(x => x.id === updatedPayment!.id ? updatedPayment! : x));
+    if (deletedPayment) setCustomerPayments(prev => prev.filter(x => x.id !== deletedPayment!.id));
 
-    // Optimistic customer balance updates
     if (sameCust) {
-      const net = newDelta - oldDelta;
+      const net = newImpact - oldImpact;
       if (net !== 0 && oldCustA)
         setCustomers(prev => prev.map(c =>
           c.id === s.customerId ? { ...c, balance: (oldCustA.balance ?? 0) + net } : c
         ));
     } else {
-      if (oldDelta !== 0 && oldCustA)
+      if (oldCustA)
         setCustomers(prev => prev.map(c =>
-          c.id === oldS.customerId ? { ...c, balance: (oldCustA.balance ?? 0) - oldDelta } : c
+          c.id === oldS.customerId ? { ...c, balance: (oldCustA.balance ?? 0) - oldImpact } : c
         ));
-      if (newDelta !== 0 && oldCustB)
+      if (oldCustB)
         setCustomers(prev => prev.map(c =>
-          c.id === s.customerId ? { ...c, balance: (oldCustB.balance ?? 0) + newDelta } : c
+          c.id === s.customerId ? { ...c, balance: (oldCustB.balance ?? 0) + newImpact } : c
         ));
     }
     toast.success('تم تحديث فاتورة البيع بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await updateRecord(SHEETS.SALES, s);
+        if (newPayment)     await insertRecord(SHEETS.CUSTOMER_PAYMENTS, newPayment);
+        if (updatedPayment) await updateRecord(SHEETS.CUSTOMER_PAYMENTS, updatedPayment);
+        if (deletedPayment) await deleteRecord(SHEETS.CUSTOMER_PAYMENTS, deletedPayment.id);
         if (sameCust) {
-          const net = newDelta - oldDelta;
+          const net = newImpact - oldImpact;
           if (net !== 0 && oldCustA)
             await updateRecord(SHEETS.CUSTOMERS, { ...oldCustA, balance: (oldCustA.balance ?? 0) + net });
         } else {
-          if (oldDelta !== 0 && oldCustA)
-            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustA, balance: (oldCustA.balance ?? 0) - oldDelta });
-          if (newDelta !== 0 && oldCustB)
-            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustB, balance: (oldCustB.balance ?? 0) + newDelta });
+          if (oldCustA)
+            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustA, balance: (oldCustA.balance ?? 0) - oldImpact });
+          if (oldCustB)
+            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustB, balance: (oldCustB.balance ?? 0) + newImpact });
         }
         onSyncOk();
       } catch (err) {
         setSales(prev => prev.map(x => x.id === s.id ? oldS : x));
+        if (newPayment)                        setCustomerPayments(prev => prev.filter(x => x.id !== newPayment!.id));
+        if (updatedPayment && existingPayment)  setCustomerPayments(prev => prev.map(x => x.id === updatedPayment!.id ? existingPayment : x));
+        if (deletedPayment)                    setCustomerPayments(prev => [...prev, deletedPayment!]);
         if (oldCustA) setCustomers(prev => prev.map(c => c.id === oldS.customerId ? oldCustA : c));
         if (!sameCust && oldCustB) setCustomers(prev => prev.map(c => c.id === s.customerId ? oldCustB : c));
         toast.error('فشل تحديث فاتورة البيع. يرجى المحاولة مرة أخرى.');
@@ -392,26 +530,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   const removeSale = useCallback((id: string) => {
-    const oldS      = salesRef.current.find(x => x.id === id);
-    const oldCust   = oldS ? customersRef.current.find(c => c.id === oldS.customerId) : undefined;
-    const delta     = oldS ? owed(oldS.totalAmount, oldS.paidAmount) : 0;
-    const newCustBal = (oldCust?.balance ?? 0) - delta;
+    const oldS    = salesRef.current.find(x => x.id === id);
+    const oldCust = oldS ? customersRef.current.find(c => c.id === oldS.customerId) : undefined;
+    const sPaid    = oldS?.paymentType === 'credit' ? (oldS?.paidAmount ?? 0) : 0;
+    const sImpact  = oldS?.paymentType === 'cash' ? (oldS?.totalAmount ?? 0) : ((oldS?.totalAmount ?? 0) - sPaid);
+    const newCustBal = (oldCust?.balance ?? 0) - sImpact;
+    const relatedPayment = customerPaymentsRef.current.find(x => x.relatedSaleId === id);
 
-    // Optimistic
     setSales(prev => prev.filter(x => x.id !== id));
-    if (delta !== 0 && oldCust && oldS)
+    if (relatedPayment) setCustomerPayments(prev => prev.filter(x => x.id !== relatedPayment.id));
+    if (oldCust && oldS)
       setCustomers(prev => prev.map(c => c.id === oldS.customerId ? { ...c, balance: newCustBal } : c));
     toast.success('تم حذف فاتورة البيع بنجاح');
 
-    // Background sync
     (async () => {
       try {
         await deleteRecord(SHEETS.SALES, id);
-        if (delta !== 0 && oldCust)
-          await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
+        if (relatedPayment) await deleteRecord(SHEETS.CUSTOMER_PAYMENTS, relatedPayment.id);
+        if (oldCust && oldS) await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
         onSyncOk();
       } catch (err) {
-        if (oldS) setSales(prev => [...prev, oldS]);
+        if (oldS)           setSales(prev => [...prev, oldS]);
+        if (relatedPayment) setCustomerPayments(prev => [...prev, relatedPayment]);
         if (oldCust && oldS) setCustomers(prev => prev.map(c => c.id === oldS.customerId ? oldCust : c));
         toast.error('فشل حذف فاتورة البيع. يرجى المحاولة مرة أخرى.');
         onSyncErr(err);
@@ -525,15 +665,241 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [toast]);
 
+  // ── Supplier Payments ─────────────────────────────────────────────────────────
+  //
+  // Mirror of customer payment logic (same balance direction, opposite display column):
+  //   سند قبض (receipt, default): supplier refunds/pays us → balance decreases
+  //   سند صرف (payment):          we pay supplier          → balance increases
+  const addSupplierPayment = useCallback((pay: SupplierPayment) => {
+    const oldSup  = suppliersRef.current.find(s => s.id === pay.supplierId);
+    const isDebit = pay.voucherType === 'payment'; // صرف increases balance
+    const newSupBal = (oldSup?.balance ?? 0) + (isDebit ? pay.amount : -pay.amount);
+
+    setSupplierPayments(prev => [...prev, pay]);
+    if (oldSup)
+      setSuppliers(prev => prev.map(s => s.id === pay.supplierId ? { ...s, balance: newSupBal } : s));
+    toast.success('تمت إضافة السند بنجاح');
+
+    (async () => {
+      try {
+        await insertRecord(SHEETS.SUPPLIER_PAYMENTS, pay);
+        if (oldSup) await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
+        onSyncOk();
+      } catch (err) {
+        setSupplierPayments(prev => prev.filter(x => x.id !== pay.id));
+        if (oldSup) setSuppliers(prev => prev.map(s => s.id === pay.supplierId ? oldSup : s));
+        toast.error('فشلت إضافة السند. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
+  const updateSupplierPayment = useCallback((pay: SupplierPayment) => {
+    const oldPay = supplierPaymentsRef.current.find(x => x.id === pay.id);
+    if (!oldPay) return;
+
+    const sameSup = oldPay.supplierId === pay.supplierId;
+    const oldSupA = suppliersRef.current.find(s => s.id === oldPay.supplierId);
+    const oldSupB = sameSup ? oldSupA : suppliersRef.current.find(s => s.id === pay.supplierId);
+
+    // Effect on supplier.balance: receipt (قبض): -amount | payment (صرف): +amount
+    const oldEffect = oldPay.voucherType === 'payment' ? oldPay.amount : -oldPay.amount;
+    const newEffect = pay.voucherType    === 'payment' ? pay.amount    : -pay.amount;
+
+    setSupplierPayments(prev => prev.map(x => x.id === pay.id ? pay : x));
+
+    if (sameSup && oldSupA) {
+      const net = newEffect - oldEffect;
+      if (net !== 0)
+        setSuppliers(prev => prev.map(s =>
+          s.id === pay.supplierId ? { ...s, balance: (oldSupA.balance ?? 0) + net } : s
+        ));
+    } else {
+      if (oldSupA)
+        setSuppliers(prev => prev.map(s =>
+          s.id === oldPay.supplierId ? { ...s, balance: (oldSupA.balance ?? 0) - oldEffect } : s
+        ));
+      if (oldSupB)
+        setSuppliers(prev => prev.map(s =>
+          s.id === pay.supplierId ? { ...s, balance: (oldSupB.balance ?? 0) + newEffect } : s
+        ));
+    }
+    toast.success('تم تحديث السند بنجاح');
+
+    (async () => {
+      try {
+        await updateRecord(SHEETS.SUPPLIER_PAYMENTS, pay);
+        if (sameSup && oldSupA) {
+          const net = newEffect - oldEffect;
+          if (net !== 0)
+            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupA, balance: (oldSupA.balance ?? 0) + net });
+        } else {
+          if (oldSupA)
+            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupA, balance: (oldSupA.balance ?? 0) - oldEffect });
+          if (oldSupB)
+            await updateRecord(SHEETS.SUPPLIERS, { ...oldSupB, balance: (oldSupB.balance ?? 0) + newEffect });
+        }
+        onSyncOk();
+      } catch (err) {
+        setSupplierPayments(prev => prev.map(x => x.id === pay.id ? oldPay : x));
+        if (oldSupA) setSuppliers(prev => prev.map(s => s.id === oldPay.supplierId ? oldSupA : s));
+        if (!sameSup && oldSupB) setSuppliers(prev => prev.map(s => s.id === pay.supplierId ? oldSupB : s));
+        toast.error('فشل تحديث السند. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
+  const removeSupplierPayment = useCallback((id: string) => {
+    const oldPay = supplierPaymentsRef.current.find(x => x.id === id);
+    const oldSup = oldPay ? suppliersRef.current.find(s => s.id === oldPay.supplierId) : undefined;
+    // Reverse the effect: receipt had -amount → restore +amount; صرف had +amount → restore -amount
+    const restore    = oldPay?.voucherType === 'payment' ? -(oldPay?.amount ?? 0) : (oldPay?.amount ?? 0);
+    const newSupBal  = (oldSup?.balance ?? 0) + restore;
+
+    setSupplierPayments(prev => prev.filter(x => x.id !== id));
+    if (oldSup && oldPay)
+      setSuppliers(prev => prev.map(s => s.id === oldPay.supplierId ? { ...s, balance: newSupBal } : s));
+    toast.success('تم حذف السند بنجاح');
+
+    (async () => {
+      try {
+        await deleteRecord(SHEETS.SUPPLIER_PAYMENTS, id);
+        if (oldSup && oldPay) await updateRecord(SHEETS.SUPPLIERS, { ...oldSup, balance: newSupBal });
+        onSyncOk();
+      } catch (err) {
+        if (oldPay) setSupplierPayments(prev => [...prev, oldPay]);
+        if (oldSup && oldPay) setSuppliers(prev => prev.map(s => s.id === oldPay.supplierId ? oldSup : s));
+        toast.error('فشل حذف السند. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
+  // ── Customer Payments (standalone — collecting on credit sales) ───────────────
+  //
+  // سند قبض (receipt, default): customer pays us → balance decreases
+  // سند صرف (payment):          we pay customer  → balance increases
+  const addCustomerPayment = useCallback((pay: CustomerPayment) => {
+    const oldCust    = customersRef.current.find(c => c.id === pay.customerId);
+    const isDebit    = pay.voucherType === 'payment';
+    const newCustBal = (oldCust?.balance ?? 0) + (isDebit ? pay.amount : -pay.amount);
+
+    setCustomerPayments(prev => [...prev, pay]);
+    if (oldCust)
+      setCustomers(prev => prev.map(c => c.id === pay.customerId ? { ...c, balance: newCustBal } : c));
+    toast.success('تمت إضافة السند بنجاح');
+
+    (async () => {
+      try {
+        await insertRecord(SHEETS.CUSTOMER_PAYMENTS, pay);
+        if (oldCust) await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
+        onSyncOk();
+      } catch (err) {
+        setCustomerPayments(prev => prev.filter(x => x.id !== pay.id));
+        if (oldCust) setCustomers(prev => prev.map(c => c.id === pay.customerId ? oldCust : c));
+        toast.error('فشلت إضافة السند. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
+  const updateCustomerPayment = useCallback((pay: CustomerPayment) => {
+    const oldPay = customerPaymentsRef.current.find(x => x.id === pay.id);
+    if (!oldPay) return;
+
+    const sameCust = oldPay.customerId === pay.customerId;
+    const oldCustA = customersRef.current.find(c => c.id === oldPay.customerId);
+    const oldCustB = sameCust ? oldCustA : customersRef.current.find(c => c.id === pay.customerId);
+
+    // Effect a payment has on customer.balance:
+    //   receipt (قبض): -amount  |  payment/صرف: +amount
+    const oldEffect = oldPay.voucherType === 'payment' ? oldPay.amount : -oldPay.amount;
+    const newEffect = pay.voucherType    === 'payment' ? pay.amount    : -pay.amount;
+
+    setCustomerPayments(prev => prev.map(x => x.id === pay.id ? pay : x));
+
+    if (sameCust && oldCustA) {
+      const net = newEffect - oldEffect;
+      if (net !== 0)
+        setCustomers(prev => prev.map(c =>
+          c.id === pay.customerId ? { ...c, balance: (oldCustA.balance ?? 0) + net } : c
+        ));
+    } else {
+      if (oldCustA)
+        setCustomers(prev => prev.map(c =>
+          c.id === oldPay.customerId ? { ...c, balance: (oldCustA.balance ?? 0) - oldEffect } : c
+        ));
+      if (oldCustB)
+        setCustomers(prev => prev.map(c =>
+          c.id === pay.customerId ? { ...c, balance: (oldCustB.balance ?? 0) + newEffect } : c
+        ));
+    }
+    toast.success('تم تحديث السند بنجاح');
+
+    (async () => {
+      try {
+        await updateRecord(SHEETS.CUSTOMER_PAYMENTS, pay);
+        if (sameCust && oldCustA) {
+          const net = newEffect - oldEffect;
+          if (net !== 0)
+            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustA, balance: (oldCustA.balance ?? 0) + net });
+        } else {
+          if (oldCustA)
+            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustA, balance: (oldCustA.balance ?? 0) - oldEffect });
+          if (oldCustB)
+            await updateRecord(SHEETS.CUSTOMERS, { ...oldCustB, balance: (oldCustB.balance ?? 0) + newEffect });
+        }
+        onSyncOk();
+      } catch (err) {
+        setCustomerPayments(prev => prev.map(x => x.id === pay.id ? oldPay : x));
+        if (oldCustA) setCustomers(prev => prev.map(c => c.id === oldPay.customerId ? oldCustA : c));
+        if (!sameCust && oldCustB) setCustomers(prev => prev.map(c => c.id === pay.customerId ? oldCustB : c));
+        toast.error('فشل تحديث السند. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
+  const removeCustomerPayment = useCallback((id: string) => {
+    const oldPay  = customerPaymentsRef.current.find(x => x.id === id);
+    const oldCust = oldPay ? customersRef.current.find(c => c.id === oldPay.customerId) : undefined;
+    // Reverse the effect: receipt had -amount effect → restore with +amount; صرف had +amount → restore with -amount
+    const restore    = oldPay?.voucherType === 'payment' ? -(oldPay?.amount ?? 0) : (oldPay?.amount ?? 0);
+    const newCustBal = (oldCust?.balance ?? 0) + restore;
+
+    setCustomerPayments(prev => prev.filter(x => x.id !== id));
+    if (oldCust && oldPay)
+      setCustomers(prev => prev.map(c => c.id === oldPay.customerId ? { ...c, balance: newCustBal } : c));
+    toast.success('تم حذف دفعة العميل بنجاح');
+
+    (async () => {
+      try {
+        await deleteRecord(SHEETS.CUSTOMER_PAYMENTS, id);
+        if (oldCust && oldPay) await updateRecord(SHEETS.CUSTOMERS, { ...oldCust, balance: newCustBal });
+        onSyncOk();
+      } catch (err) {
+        if (oldPay) setCustomerPayments(prev => [...prev, oldPay]);
+        if (oldCust && oldPay) setCustomers(prev => prev.map(c => c.id === oldPay.customerId ? oldCust : c));
+        toast.error('فشل حذف دفعة العميل. يرجى المحاولة مرة أخرى.');
+        onSyncErr(err);
+      }
+    })();
+  }, [toast]);
+
   return (
     <DataContext.Provider value={{
-      employees, customers, suppliers, purchases, sales, syncStatus, loadAll,
+      employees, customers, suppliers, purchases, sales, expenses,
+      supplierPayments, customerPayments,
+      syncStatus, loadAll,
       addEmployee, updateEmployee, removeEmployee,
       addCustomer, updateCustomer, removeCustomer,
       addSupplier, updateSupplier, removeSupplier,
       addPurchase, updatePurchase, removePurchase,
       addSale, updateSale, removeSale,
-      expenses, addExpense, updateExpense, removeExpense,
+      addExpense, updateExpense, removeExpense,
+      addSupplierPayment, updateSupplierPayment, removeSupplierPayment,
+      addCustomerPayment, updateCustomerPayment, removeCustomerPayment,
     }}>
       {children}
     </DataContext.Provider>

@@ -112,7 +112,7 @@ export default function Employees() {
       key: 'salary',
       label: 'الراتب',
       render: (row: Employee) =>
-        row.salary.toLocaleString('ar-SA', { minimumFractionDigits: 0 }),
+        row.salary.toLocaleString('en-US', { minimumFractionDigits: 0 }) + ' ₪',
     },
     { key: 'joinDate', label: 'تاريخ الالتحاق' },
   ];
@@ -175,9 +175,8 @@ export default function Employees() {
                 value={form.salary}
                 onChange={e => handleChange('salary', e.target.value)}
                 placeholder="0"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
               />
             </FormField>
 

@@ -1,6 +1,6 @@
 import { APPS_SCRIPT_URL } from './config';
 
-type SheetName = 'employees' | 'customers' | 'suppliers' | 'purchases' | 'sales' | 'expenses' | 'users';
+type SheetName = 'employees' | 'customers' | 'suppliers' | 'purchases' | 'sales' | 'expenses' | 'users' | 'supplier_payments' | 'customer_payments';
 type Action = 'insert' | 'update' | 'delete' | 'upsert';
 
 async function apiFetch<T>(url: string): Promise<T> {

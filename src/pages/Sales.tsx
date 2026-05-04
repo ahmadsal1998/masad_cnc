@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
@@ -9,36 +9,70 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
+import FilterBar, { type FilterField } from '../components/ui/FilterBar';
 
 const EMPTY_ITEM: SaleItem = { description: '', quantity: 1, unitPrice: 0, total: 0 };
 
 const EMPTY_FORM = {
-  customerId: '',
-  customerName: '',
-  date: new Date().toISOString().split('T')[0],
-  paidAmount: 0,
-  discountType: 'fixed' as 'fixed' | 'percent',
+  customerId:    '',
+  customerName:  '',
+  date:          new Date().toISOString().split('T')[0],
+  paymentType:   'credit' as 'cash' | 'credit',
+  discountType:  'fixed'  as 'fixed' | 'percent',
   discountValue: 0,
-  notes: '',
+  paidAmount:    0,
+  notes:         '',
+};
+
+const EMPTY_FILTERS: Record<string, string> = {
+  search:      '',
+  dateFrom:    '',
+  dateTo:      '',
+  paymentType: '',
+  customerId:  '',
 };
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 export default function Sales() {
   const { sales, customers, addSale, updateSale, removeSale } = useData();
   const toast = useToast();
-  const [search, setSearch] = useState('');
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const [filters, setFilters] = useState<Record<string, string>>(EMPTY_FILTERS);
+
+  const filterConfig: FilterField[] = useMemo(() => [
+    { key: 'search',      type: 'search',    placeholder: 'بحث بالعميل...' },
+    { key: 'dateFrom',    type: 'date-from' },
+    { key: 'dateTo',      type: 'date-to' },
+    { key: 'paymentType', type: 'segmented', options: [
+      { value: '',       label: 'الكل' },
+      { value: 'cash',   label: 'نقد' },
+      { value: 'credit', label: 'آجل' },
+    ]},
+    { key: 'customerId', type: 'select', allLabel: 'كل العملاء',
+      options: customers.map(c => ({ value: c.id, label: c.name })) },
+  ], [customers]);
+
+  const filtered = useMemo(() => {
+    const q = filters.search.toLowerCase();
+    return sales.filter(s => {
+      if (q && !s.customerName.toLowerCase().includes(q) && !s.id.toLowerCase().includes(q)) return false;
+      if (filters.dateFrom    && s.date < filters.dateFrom) return false;
+      if (filters.dateTo      && s.date > filters.dateTo)   return false;
+      if (filters.paymentType && s.paymentType !== filters.paymentType) return false;
+      if (filters.customerId  && s.customerId  !== filters.customerId)  return false;
+      return true;
+    });
+  }, [sales, filters]);
+
+  // ── Form ──────────────────────────────────────────────────────────────────
   const [form, setForm] = useState(EMPTY_FORM);
   const [items, setItems] = useState<SaleItem[]>([{ ...EMPTY_ITEM }]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null);
-  const filtered = useMemo(() =>
-    sales.filter(s =>
-      s.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      s.date.includes(search)
-    ), [sales, search]);
 
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, date: new Date().toISOString().split('T')[0] });
@@ -49,13 +83,14 @@ export default function Sales() {
 
   const openEdit = (s: Sale) => {
     setForm({
-      customerId: s.customerId,
-      customerName: s.customerName,
-      date: s.date,
-      paidAmount: s.paidAmount,
-      discountType: s.discountType ?? 'fixed',
+      customerId:    s.customerId,
+      customerName:  s.customerName,
+      date:          s.date,
+      paymentType:   s.paymentType ?? 'credit',
+      discountType:  s.discountType ?? 'fixed',
       discountValue: s.discountValue ?? 0,
-      notes: s.notes,
+      paidAmount:    s.paidAmount ?? 0,
+      notes:         s.notes,
     });
     setItems(Array.isArray(s.items) ? s.items.map(i => ({ ...i })) : [{ ...EMPTY_ITEM }]);
     setEditingId(s.id);
@@ -76,14 +111,17 @@ export default function Sales() {
     });
   };
 
-  const addItem = () => setItems(prev => [...prev, { ...EMPTY_ITEM }]);
+  const addItem    = () => setItems(prev => [...prev, { ...EMPTY_ITEM }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const subtotal = items.reduce((s, i) => s + (i.total || 0), 0);
+  const subtotal       = items.reduce((s, i) => s + (i.total || 0), 0);
   const discountAmount = form.discountType === 'percent'
     ? (subtotal * Math.min(Math.max(form.discountValue, 0), 100)) / 100
     : Math.min(Math.max(form.discountValue, 0), subtotal);
-  const totalAmount = subtotal - discountAmount;
+  const totalAmount     = subtotal - discountAmount;
+  const remainingAmount = form.paymentType === 'credit'
+    ? Math.max(0, totalAmount - form.paidAmount)
+    : 0;
 
   const handleCustomerChange = (id: string) => {
     const cust = customers.find(c => c.id === id);
@@ -94,23 +132,25 @@ export default function Sales() {
     if (!form.customerId) { toast.error('يرجى اختيار العميل'); return; }
     if (items.length === 0 || items.every(i => !i.description)) { toast.error('يرجى إضافة صنف واحد على الأقل'); return; }
     if (form.discountType === 'percent' && form.discountValue > 100) { toast.error('نسبة الخصم لا يمكن أن تتجاوز 100%'); return; }
-    if (form.discountType === 'fixed' && form.discountValue > subtotal) { toast.error('الخصم لا يمكن أن يتجاوز إجمالي الفاتورة'); return; }
+    if (form.discountType === 'fixed'   && form.discountValue > subtotal) { toast.error('الخصم لا يمكن أن يتجاوز إجمالي الفاتورة'); return; }
+    if (form.paymentType === 'credit'   && form.paidAmount > totalAmount) { toast.error('المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة'); return; }
     const sale: Sale = {
-      id: editingId ?? generateId(),
-      customerId: form.customerId,
-      customerName: form.customerName,
-      date: form.date,
-      items: items.filter(i => i.description),
-      discountType: form.discountType,
+      id:            editingId ?? generateId(),
+      customerId:    form.customerId,
+      customerName:  form.customerName,
+      date:          form.date,
+      items:         items.filter(i => i.description),
+      discountType:  form.discountType,
       discountValue: form.discountValue,
       discountAmount,
       totalAmount,
-      paidAmount: parseFloat(String(form.paidAmount)) || 0,
-      notes: form.notes,
+      paymentType:   form.paymentType,
+      paidAmount:    form.paymentType === 'credit' ? form.paidAmount : undefined,
+      notes:         form.notes,
     };
     closeModal();
     if (editingId) updateSale(sale);
-    else addSale(sale);
+    else           addSale(sale);
   };
 
   const handleDelete = () => {
@@ -122,30 +162,24 @@ export default function Sales() {
 
   const columns = [
     { key: 'customerName', label: 'العميل' },
-    { key: 'date', label: 'التاريخ' },
+    { key: 'date',         label: 'التاريخ' },
     {
       key: 'totalAmount',
       label: 'الإجمالي',
       render: (s: Sale) => <span className="font-medium">{fmt(s.totalAmount)} ₪</span>,
     },
     {
-      key: 'paidAmount',
-      label: 'المحصّل',
-      render: (s: Sale) => (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-          s.paidAmount >= s.totalAmount ? 'bg-green-100 text-green-700' :
-          s.paidAmount > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'
-        }`}>
-          {fmt(s.paidAmount)} ₪
-        </span>
-      ),
-    },
-    {
-      key: 'remaining',
-      label: 'المتبقي',
+      key: 'paymentType',
+      label: 'طريقة الدفع',
       render: (s: Sale) => {
-        const rem = s.totalAmount - s.paidAmount;
-        return <span className={rem > 0 ? 'text-red-500 font-medium' : 'text-gray-400'}>{fmt(rem)} ₪</span>;
+        const type = s.paymentType ?? 'credit';
+        return (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+            type === 'cash' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+          }`}>
+            {type === 'cash' ? 'نقد' : 'آجل'}
+          </span>
+        );
       },
     },
   ];
@@ -157,8 +191,15 @@ export default function Sales() {
         count={filtered.length}
         onAdd={openAdd}
         addLabel="إضافة فاتورة بيع"
-        search={search}
-        onSearch={setSearch}
+      />
+
+      <FilterBar
+        config={filterConfig}
+        values={filters}
+        onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+        onReset={() => setFilters(EMPTY_FILTERS)}
+        resultCount={filtered.length}
+        totalCount={sales.length}
       />
 
       <Table
@@ -216,12 +257,12 @@ export default function Sales() {
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <p className="text-xs text-gray-400 mb-1">الكمية</p>
-                        <Input type="number" min="1" inputMode="decimal" value={item.quantity}
+                        <Input type="text" inputMode="decimal" value={item.quantity}
                           onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} />
                       </div>
                       <div>
                         <p className="text-xs text-gray-400 mb-1">سعر الوحدة</p>
-                        <Input type="number" min="0" step="0.01" inputMode="decimal" value={item.unitPrice}
+                        <Input type="text" inputMode="decimal" value={item.unitPrice}
                           onChange={e => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} />
                       </div>
                       <div>
@@ -266,10 +307,10 @@ export default function Sales() {
                           <Input value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} placeholder="اسم الصنف" />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} />
+                          <Input type="text" inputMode="decimal" value={item.quantity} onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                          <Input type="text" inputMode="decimal" value={item.unitPrice} onChange={e => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} />
                         </td>
                         <td className="px-3 py-1.5 font-medium text-gray-700">{fmt(item.total)}</td>
                         <td className="px-1 py-1.5">
@@ -325,10 +366,8 @@ export default function Sales() {
                 </button>
               </div>
               <Input
-                type="number"
-                min="0"
-                max={form.discountType === 'percent' ? 100 : undefined}
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={form.discountValue || ''}
                 onChange={e => setForm(f => ({ ...f, discountValue: parseFloat(e.target.value) || 0 }))}
                 placeholder={form.discountType === 'percent' ? '0%' : '0.00'}
@@ -342,14 +381,53 @@ export default function Sales() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="المبلغ المحصّل">
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.paidAmount}
-                  onChange={e => setForm(f => ({ ...f, paidAmount: parseFloat(e.target.value) || 0 }))}
-                />
+              <FormField label="طريقة الدفع" required>
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm bg-white h-10">
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, paymentType: 'cash', paidAmount: 0 }))}
+                    className={`flex-1 px-3 py-2 transition-colors font-medium ${
+                      form.paymentType === 'cash' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    نقد
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, paymentType: 'credit' }))}
+                    className={`flex-1 px-3 py-2 transition-colors font-medium ${
+                      form.paymentType === 'credit' ? 'bg-orange-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    آجل
+                  </button>
+                </div>
+                {form.paymentType === 'cash' && (
+                  <p className="text-xs text-green-600 mt-1">سيتم تسجيل دفعة تحصيل تلقائية بالمبلغ الكامل</p>
+                )}
+                {form.paymentType === 'credit' && (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-gray-500">المبلغ المدفوع مقدماً (اختياري)</p>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={form.paidAmount || ''}
+                      onChange={e => setForm(f => ({ ...f, paidAmount: parseFloat(e.target.value) || 0 }))}
+                      placeholder="0.00"
+                    />
+                    {form.paidAmount > 0 && form.paidAmount <= totalAmount && (
+                      <p className="text-xs text-orange-600 font-medium">
+                        المتبقي: {fmt(remainingAmount)} ₪ ← يُضاف لرصيد العميل
+                      </p>
+                    )}
+                    {form.paidAmount > totalAmount && (
+                      <p className="text-xs text-red-500">المبلغ المدفوع يتجاوز إجمالي الفاتورة</p>
+                    )}
+                    {form.paidAmount === 0 && (
+                      <p className="text-xs text-gray-400">المبلغ الكامل {fmt(totalAmount)} ₪ يُضاف لرصيد العميل</p>
+                    )}
+                  </div>
+                )}
               </FormField>
               <FormField label="ملاحظات">
                 <TextArea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />

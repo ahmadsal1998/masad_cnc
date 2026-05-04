@@ -45,8 +45,20 @@ export interface Purchase {
   discountValue?: number;
   discountAmount?: number;
   totalAmount: number;
-  paidAmount: number;
+  paymentType: 'cash' | 'credit';
+  paidAmount?: number; // legacy field kept for backward-compat with existing sheet data
   notes: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  supplierId: string;
+  amount: number;
+  type: 'cash' | 'bank' | 'transfer';
+  voucherType?: 'receipt' | 'payment'; // receipt=سند قبض, payment=سند صرف; default='payment'
+  relatedPurchaseId?: string;
+  date: string;
+  notes?: string;
 }
 
 export interface SaleItem {
@@ -66,8 +78,20 @@ export interface Sale {
   discountValue?: number;
   discountAmount?: number;
   totalAmount: number;
-  paidAmount: number;
+  paymentType: 'cash' | 'credit';
+  paidAmount?: number; // legacy field kept for backward-compat with existing sheet data
   notes: string;
+}
+
+export interface CustomerPayment {
+  id: string;
+  customerId: string;
+  amount: number;
+  type: 'cash' | 'bank' | 'transfer';
+  voucherType?: 'receipt' | 'payment'; // receipt=سند قبض, payment=سند صرف; default='receipt'
+  relatedSaleId?: string;
+  date: string;
+  notes?: string;
 }
 
 export interface Expense {
@@ -97,6 +121,8 @@ export interface AppData {
   purchases: Purchase[];
   sales: Sale[];
   expenses: Expense[];
+  supplierPayments: SupplierPayment[];
+  customerPayments: CustomerPayment[];
 }
 
 export interface SyncStatus {

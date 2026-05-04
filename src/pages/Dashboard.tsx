@@ -28,16 +28,18 @@ function StatCard({ title, value, subtitle, icon, colorBg }: StatCardProps) {
 }
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 export default function Dashboard() {
-  const { employees, customers, suppliers, purchases, sales, expenses, syncStatus } = useData();
+  const { employees, customers, suppliers, purchases, sales, expenses, supplierPayments, customerPayments, syncStatus } = useData();
 
   const stats = useMemo(() => {
     const totalSales      = sales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const paidSales       = sales.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
+    // Collected from customers: all customer_payments linked to a sale (cash sales) + standalone payments
+    const collectedSales  = customerPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
     const totalPurchases  = purchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const paidPurchases   = purchases.reduce((s, x) => s + (x.paidAmount  ?? 0), 0);
+    // Paid to suppliers: all supplier_payments linked to a purchase (cash purchases) + standalone payments
+    const paidPurchases   = supplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
     const customerDebts   = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
     const supplierDebts   = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
     const totalExpenses   = expenses.reduce((s, x) => s + (x.amount ?? 0), 0);
@@ -47,10 +49,10 @@ export default function Dashboard() {
     const monthlyExpenses = expenses.filter(e => e.date?.startsWith(monthStr)).reduce((s, x) => s + (x.amount ?? 0), 0);
     const netProfit       = totalSales - totalPurchases - totalExpenses;
     return {
-      totalSales, paidSales, totalPurchases, paidPurchases,
+      totalSales, collectedSales, totalPurchases, paidPurchases,
       customerDebts, supplierDebts, totalExpenses, todayExpenses, monthlyExpenses, netProfit,
     };
-  }, [sales, purchases, customers, suppliers, expenses]);
+  }, [sales, purchases, supplierPayments, customerPayments, customers, suppliers, expenses]);
 
   const recentSales     = useMemo(() => [...sales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [sales]);
   const recentPurchases = useMemo(() => [...purchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [purchases]);
@@ -76,7 +78,7 @@ export default function Dashboard() {
         <StatCard
           title="إجمالي المبيعات"
           value={`${fmt(stats.totalSales)}`}
-          subtitle={`محصّل: ${fmt(stats.paidSales)}`}
+          subtitle={`محصّل: ${fmt(stats.collectedSales)}`}
           icon={<TrendingUp size={20} className="text-emerald-600" />}
           colorBg="bg-emerald-50"
         />
@@ -148,7 +150,8 @@ interface RecentRow {
   id: string;
   date: string;
   totalAmount: number;
-  paidAmount: number;
+  paidAmount?: number;        // used by sales
+  paymentType?: 'cash' | 'credit'; // used by purchases
   customerName?: string;
   supplierName?: string;
 }
@@ -171,13 +174,15 @@ function RecentTable({ title, rows, type }: { title: string; rows: RecentRow[]; 
                 </th>
                 <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">التاريخ</th>
                 <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">الإجمالي</th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">المدفوع</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">
+                  {type === 'sale' ? 'المدفوع' : 'طريقة الدفع'}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {rows.map(row => {
-                const isPaid = row.paidAmount >= row.totalAmount;
-                const isPartial = row.paidAmount > 0 && !isPaid;
+                const isPaid    = (row.paidAmount ?? 0) >= row.totalAmount;
+                const isPartial = (row.paidAmount ?? 0) > 0 && !isPaid;
                 return (
                   <tr key={row.id} className="hover:bg-gray-50/70">
                     <td className="px-4 py-3 font-medium text-gray-800 truncate max-w-32">
@@ -185,16 +190,26 @@ function RecentTable({ title, rows, type }: { title: string; rows: RecentRow[]; 
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{row.date}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
-                      {new Intl.NumberFormat('ar-SA').format(row.totalAmount)}
+                      {new Intl.NumberFormat('en-US').format(row.totalAmount)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
-                        isPaid    ? 'bg-emerald-100 text-emerald-700' :
-                        isPartial ? 'bg-yellow-100 text-yellow-700'  :
-                                    'bg-red-100 text-red-600'
-                      }`}>
-                        {new Intl.NumberFormat('ar-SA').format(row.paidAmount)}
-                      </span>
+                      {type === 'sale' ? (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
+                          isPaid    ? 'bg-emerald-100 text-emerald-700' :
+                          isPartial ? 'bg-yellow-100 text-yellow-700'  :
+                                      'bg-red-100 text-red-600'
+                        }`}>
+                          {new Intl.NumberFormat('en-US').format(row.paidAmount ?? 0)}
+                        </span>
+                      ) : (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
+                          (row.paymentType ?? 'credit') === 'cash'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-orange-100 text-orange-700'
+                        }`}>
+                          {(row.paymentType ?? 'credit') === 'cash' ? 'نقد' : 'آجل'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

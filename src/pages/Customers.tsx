@@ -1,46 +1,80 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { FileText } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import type { Customer } from '../types';
 import { generateId } from '../utils/hash';
+import { computeCustomerCurrentBalance } from '../utils/balance';
 import { toStr } from '../utils/form';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea } from '../components/ui/FormField';
+import FilterBar, { type FilterField } from '../components/ui/FilterBar';
 
 const EMPTY_FORM = {
-  name: '',
-  phone: '',
-  email: '',
+  name:    '',
+  phone:   '',
+  email:   '',
   address: '',
   balance: '',
-  notes: '',
+  notes:   '',
 };
 
 type FormState = typeof EMPTY_FORM;
 
-export default function Customers() {
-  const { customers, addCustomer, updateCustomer, removeCustomer } = useData();
+const EMPTY_FILTERS: Record<string, string> = {
+  search:        '',
+  balanceStatus: '',
+};
 
-  const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [errors, setErrors] = useState<Partial<FormState>>({});
+const FILTER_CONFIG: FilterField[] = [
+  { key: 'search',        type: 'search',    placeholder: 'بحث بالاسم أو الهاتف...' },
+  { key: 'balanceStatus', type: 'segmented', options: [
+    { value: '',          label: 'الكل' },
+    { value: 'indebted',  label: 'مدين' },
+    { value: 'settled',   label: 'مسوّى' },
+  ]},
+];
+
+export default function Customers() {
+  const { customers, sales, customerPayments, addCustomer, updateCustomer, removeCustomer } = useData();
+
+  const [filters, setFilters]       = useState<Record<string, string>>(EMPTY_FILTERS);
+  const [modalOpen, setModalOpen]   = useState(false);
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [form, setForm]             = useState<FormState>(EMPTY_FORM);
+  const [errors, setErrors]         = useState<Partial<FormState>>({});
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
 
+  const balanceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of customers) {
+      map.set(
+        c.id,
+        computeCustomerCurrentBalance(
+          c.balance,
+          sales.filter(s => s.customerId === c.id),
+          customerPayments.filter(p => p.customerId === c.id),
+        ),
+      );
+    }
+    return map;
+  }, [customers, sales, customerPayments]);
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter(
-      c =>
-        (c.name ?? '').toLowerCase().includes(q) ||
-        (c.phone ?? '').includes(q) ||
-        (c.email ?? '').toLowerCase().includes(q) ||
-        (c.address ?? '').toLowerCase().includes(q),
-    );
-  }, [customers, search]);
+    const q = filters.search.trim().toLowerCase();
+    return customers.filter(c => {
+      if (q && !(c.name ?? '').toLowerCase().includes(q)
+            && !(c.phone ?? '').includes(q)
+            && !(c.email ?? '').toLowerCase().includes(q)) return false;
+      const bal = balanceMap.get(c.id) ?? 0;
+      if (filters.balanceStatus === 'indebted' && bal <= 0) return false;
+      if (filters.balanceStatus === 'settled'  && bal !== 0) return false;
+      return true;
+    });
+  }, [customers, filters, balanceMap]);
 
   function openAdd() {
     setEditingId(null);
@@ -52,12 +86,12 @@ export default function Customers() {
   function openEdit(customer: Customer) {
     setEditingId(customer.id);
     setForm({
-      name: toStr(customer.name),
-      phone: toStr(customer.phone),
-      email: toStr(customer.email),
+      name:    toStr(customer.name),
+      phone:   toStr(customer.phone),
+      email:   toStr(customer.email),
       address: toStr(customer.address),
       balance: toStr(customer.balance ?? 0),
-      notes: toStr(customer.notes),
+      notes:   toStr(customer.notes),
     });
     setErrors({});
     setModalOpen(true);
@@ -85,17 +119,17 @@ export default function Customers() {
   function handleSubmit() {
     if (!validate()) return;
     const customer: Customer = {
-      id: editingId ?? generateId(),
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
+      id:      editingId ?? generateId(),
+      name:    form.name.trim(),
+      phone:   form.phone.trim(),
+      email:   form.email.trim(),
       address: form.address.trim(),
       balance: parseFloat(form.balance) || 0,
-      notes: form.notes.trim(),
+      notes:   form.notes.trim(),
     };
     closeModal();
     if (editingId) updateCustomer(customer);
-    else addCustomer(customer);
+    else           addCustomer(customer);
   }
 
   function handleDelete() {
@@ -106,27 +140,34 @@ export default function Customers() {
   }
 
   const columns = [
-    { key: 'name', label: 'الاسم' },
+    { key: 'name',  label: 'الاسم' },
     { key: 'phone', label: 'الهاتف' },
     { key: 'email', label: 'البريد الإلكتروني' },
     { key: 'address', label: 'العنوان' },
     {
       key: 'balance',
       label: 'الرصيد',
+      render: (row: Customer) => {
+        const bal = balanceMap.get(row.id) ?? 0;
+        return (
+          <span className={bal === 0 ? 'text-green-600 font-medium' : 'text-orange-500 font-medium'}>
+            {bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₪
+          </span>
+        );
+      },
+    },
+    {
+      key: 'statement',
+      label: 'كشف الحساب',
       render: (row: Customer) => (
-        <span
-          className={
-            row.balance === 0
-              ? 'text-green-600 font-medium'
-              : 'text-orange-500 font-medium'
-          }
+        <Link
+          to={`/customers/${row.id}/statement`}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+          onClick={e => e.stopPropagation()}
         >
-          {row.balance.toLocaleString('ar-SA', {
-            style: 'currency',
-            currency: 'SAR',
-            minimumFractionDigits: 2,
-          })}
-        </span>
+          <FileText size={12} />
+          عرض
+        </Link>
       ),
     },
   ];
@@ -135,11 +176,18 @@ export default function Customers() {
     <div className="p-6" dir="rtl">
       <PageHeader
         title="العملاء"
-        count={customers.length}
+        count={filtered.length}
         onAdd={openAdd}
         addLabel="إضافة عميل"
-        search={search}
-        onSearch={setSearch}
+      />
+
+      <FilterBar
+        config={FILTER_CONFIG}
+        values={filters}
+        onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+        onReset={() => setFilters(EMPTY_FILTERS)}
+        resultCount={filtered.length}
+        totalCount={customers.length}
       />
 
       <Table
@@ -190,9 +238,8 @@ export default function Customers() {
                 value={form.balance}
                 onChange={e => handleChange('balance', e.target.value)}
                 placeholder="0.00"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
               />
             </FormField>
 

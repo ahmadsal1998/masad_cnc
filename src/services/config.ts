@@ -5,11 +5,13 @@
 export const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || '';
 
 export const SHEETS = {
-  EMPLOYEES: 'employees',
-  CUSTOMERS:  'customers',
-  SUPPLIERS:  'suppliers',
-  PURCHASES:  'purchases',
-  SALES:      'sales',
-  EXPENSES:   'expenses',
-  USERS:      'users',
+  EMPLOYEES:         'employees',
+  CUSTOMERS:         'customers',
+  SUPPLIERS:         'suppliers',
+  PURCHASES:         'purchases',
+  SALES:             'sales',
+  EXPENSES:          'expenses',
+  USERS:             'users',
+  SUPPLIER_PAYMENTS: 'supplier_payments',
+  CUSTOMER_PAYMENTS: 'customer_payments',
 } as const;

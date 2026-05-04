@@ -28,7 +28,7 @@ export default function FilterBar({
   // ── Search debounce (local state so the input stays snappy) ──────────────
   const searchField = config.find(f => f.type === 'search');
   const [searchLocal, setSearchLocal] = useState(searchField ? (values[searchField.key] ?? '') : '');
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Keep local search in sync when parent resets
   useEffect(() => {

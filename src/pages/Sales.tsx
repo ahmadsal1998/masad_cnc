@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import type { Sale, SaleItem } from '../types';
 import { generateId } from '../utils/hash';
+import { formatDate } from '../utils/formatDate';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
@@ -162,7 +163,7 @@ export default function Sales() {
 
   const columns = [
     { key: 'customerName', label: 'العميل' },
-    { key: 'date',         label: 'التاريخ' },
+    { key: 'date', label: 'التاريخ', render: (s: Sale) => <span>{formatDate(s.date)}</span> },
     {
       key: 'totalAmount',
       label: 'الإجمالي',

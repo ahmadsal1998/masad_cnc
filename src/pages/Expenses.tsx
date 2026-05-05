@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import type { Expense } from '../types';
 import { generateId } from '../utils/hash';
+import { formatDate } from '../utils/formatDate';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
@@ -170,7 +171,7 @@ export default function Expenses() {
       label: 'المبلغ',
       render: (e: Expense) => <span className="font-semibold text-gray-800">{fmt(e.amount)} ₪</span>,
     },
-    { key: 'date',     label: 'التاريخ' },
+    { key: 'date', label: 'التاريخ', render: (e: Expense) => <span>{formatDate(e.date)}</span> },
     { key: 'category', label: 'الفئة' },
     {
       key: 'paymentMethod',

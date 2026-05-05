@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { computeCustomerOpeningBalance } from '../utils/balance';
+import { formatDate } from '../utils/formatDate';
 import { generateId } from '../utils/hash';
 import type { CustomerPayment } from '../types';
 import VoucherModal from '../components/ui/VoucherModal';
@@ -612,7 +613,7 @@ function TransactionRow({ tx, cbs }: { tx: CustomerTransaction; cbs: TxCallbacks
 
   return (
     <tr className={`hover:bg-gray-50/60 transition-colors ${rowBg}`}>
-      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{tx.date}</td>
+      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{formatDate(tx.date)}</td>
       <td className="px-4 py-3"><TypeBadge tx={tx} /></td>
       <td className="px-4 py-3 text-gray-700 text-xs font-mono">{tx.reference}</td>
       <td className="px-4 py-3 text-blue-700 font-medium whitespace-nowrap">
@@ -644,7 +645,7 @@ function TransactionCard({ tx, cbs }: { tx: CustomerTransaction; cbs: TxCallback
       <div className="flex items-start justify-between gap-3 mb-3">
         <TypeBadge tx={tx} />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">{tx.date}</span>
+          <span className="text-xs text-gray-400">{formatDate(tx.date)}</span>
           <PaymentActions tx={tx} cbs={cbs} />
         </div>
       </div>

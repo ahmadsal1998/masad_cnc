@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { formatDate } from '../utils/formatDate';
 import { useData } from '../context/DataContext';
 import {
   TrendingUp, ShoppingCart, Users, Truck,
@@ -188,7 +189,7 @@ function RecentTable({ title, rows, type }: { title: string; rows: RecentRow[]; 
                     <td className="px-4 py-3 font-medium text-gray-800 truncate max-w-32">
                       {type === 'sale' ? row.customerName : row.supplierName}
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{row.date}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
                       {new Intl.NumberFormat('en-US').format(row.totalAmount)}
                     </td>

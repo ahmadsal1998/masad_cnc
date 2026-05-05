@@ -100,7 +100,7 @@ export default function Dashboard() {
         <StatCard
           title="مستحقات الموردين"
           value={`${fmt(stats.supplierDebts)}`}
-          subtitle={`${suppliers.length} مورد`}
+          subtitle={`مدفوع: ${fmt(stats.paidPurchases)}`}
           icon={<Truck size={20} className="text-purple-600" />}
           colorBg="bg-purple-50"
         />

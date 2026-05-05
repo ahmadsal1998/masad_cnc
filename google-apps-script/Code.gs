@@ -26,8 +26,8 @@ var SHEET_HEADERS = {
   sales:            ['id', 'customerId', 'customerName', 'date', 'items', 'discountType', 'discountValue', 'discountAmount', 'totalAmount', 'paymentType', 'paidAmount', 'notes'],
   expenses:         ['id', 'title', 'amount', 'date', 'category', 'paymentMethod', 'supplierId', 'supplierName', 'notes'],
   users:            ['id', 'email', 'password', 'name', 'role'],
-  supplier_payments: ['id', 'supplierId', 'amount', 'type', 'relatedPurchaseId', 'date', 'notes'],
-  customer_payments: ['id', 'customerId', 'amount', 'type', 'relatedSaleId',     'date', 'notes']
+  supplier_payments: ['id', 'supplierId', 'amount', 'type', 'voucherType', 'relatedPurchaseId', 'date', 'notes'],
+  customer_payments: ['id', 'customerId', 'amount', 'type', 'voucherType', 'relatedSaleId',     'date', 'notes']
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -38,10 +38,18 @@ function getOrCreateSheet(name) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
   }
-  // Ensure headers are present
   var headers = SHEET_HEADERS[name];
-  if (headers && sheet.getLastRow() === 0) {
+  if (!headers) return sheet;
+  if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
+  } else {
+    // Always keep header row in sync with the current schema definition.
+    // This handles schema upgrades (e.g. adding new columns) without requiring
+    // a manual sheet reset.
+    var currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (currentHeaders.join(',') !== headers.join(',')) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
   }
   return sheet;
 }
@@ -66,6 +74,17 @@ function sheetToObjects(sheet) {
       }
       obj[h] = val;
     });
+    // Legacy rows (pre-schema-update) may have totalAmount = 0 because the column
+    // was added after the row was written. Recover it from line items.
+    if (!obj.totalAmount && Array.isArray(obj.items) && obj.items.length > 0) {
+      var subtotal = obj.items.reduce(function(s, item) { return s + (Number(item.total) || 0); }, 0);
+      var discount = Number(obj.discountAmount) || 0;
+      obj.totalAmount = subtotal - discount;
+    }
+    // Legacy rows may also be missing paymentType; default to 'credit'.
+    if (!obj.paymentType && (obj.totalAmount || obj.items)) {
+      obj.paymentType = 'credit';
+    }
     return obj;
   });
 }

@@ -39,7 +39,7 @@ const FILTER_CONFIG: FilterField[] = [
 ];
 
 export default function Suppliers() {
-  const { suppliers, purchases, supplierPayments, addSupplier, updateSupplier, removeSupplier } = useData();
+  const { suppliers, purchases, supplierPayments, expenses, addSupplier, updateSupplier, removeSupplier } = useData();
 
   const [filters, setFilters]       = useState<Record<string, string>>(EMPTY_FILTERS);
   const [modalOpen, setModalOpen]   = useState(false);
@@ -57,11 +57,12 @@ export default function Suppliers() {
           s.balance,
           purchases.filter(p => p.supplierId === s.id),
           supplierPayments.filter(p => p.supplierId === s.id),
+          expenses.filter(e => e.paymentMethod === 'credit' && e.supplierId === s.id),
         ),
       );
     }
     return map;
-  }, [suppliers, purchases, supplierPayments]);
+  }, [suppliers, purchases, supplierPayments, expenses]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();

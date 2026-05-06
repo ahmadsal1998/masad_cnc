@@ -83,7 +83,7 @@ export default function CustomerStatement() {
         .map(p => {
           const vt       = p.voucherType ?? 'receipt';
           const isDebit  = vt === 'payment';
-          const refLabel = isDebit ? 'سند صرف' : 'سند قبض';
+          const refLabel = isDebit ? 'إضافة دين على العميل' : 'إضافة دفعة للعميل';
           return {
             id:          p.id,
             date:        p.date,
@@ -538,14 +538,14 @@ function TypeBadge({ tx }: { tx: Pick<CustomerTransaction, 'type' | 'voucherType
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium whitespace-nowrap">
         <CreditCard size={10} />
-        سند صرف
+        إضافة دين على العميل
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium whitespace-nowrap">
       <CreditCard size={10} />
-      سند قبض
+      إضافة دفعة للعميل
     </span>
   );
 }

@@ -15,6 +15,7 @@ type SaleLike     = { paymentType: string; totalAmount: number; paidAmount?: num
 type CustomerPay  = { amount: number; relatedSaleId?: string; voucherType?: 'receipt' | 'payment' };
 type PurchaseLike = { paymentType: string; totalAmount: number; paidAmount?: number };
 type SupplierPay  = { amount: number; relatedPurchaseId?: string; voucherType?: 'receipt' | 'payment' };
+type ExpenseLike  = { paymentMethod: string; amount: number };
 
 function txImpact(items: SaleLike[]): number {
   return items.reduce((sum, s) => {
@@ -64,6 +65,7 @@ export function computeSupplierOpeningBalance(
   storedBalance: number,
   purchases: PurchaseLike[],
   payments: SupplierPay[],
+  expenses: ExpenseLike[] = [],
 ): number {
   const standalone = payments.filter(p => !p.relatedPurchaseId);
   const standaloneReceipts = standalone
@@ -72,17 +74,22 @@ export function computeSupplierOpeningBalance(
   const standaloneDebits = standalone
     .filter(p => p.voucherType === 'payment')
     .reduce((s, p) => s + p.amount, 0);
-  return storedBalance - txImpact(purchases) + standaloneReceipts - standaloneDebits;
+  const creditExpenses = expenses
+    .filter(e => e.paymentMethod === 'credit')
+    .reduce((s, e) => s + e.amount, 0);
+  return storedBalance - txImpact(purchases) + standaloneReceipts - standaloneDebits - creditExpenses;
 }
 
 export function computeSupplierCurrentBalance(
   storedBalance: number,
   purchases: PurchaseLike[],
   payments: SupplierPay[],
+  expenses: ExpenseLike[] = [],
 ): number {
-  const opening        = computeSupplierOpeningBalance(storedBalance, purchases, payments);
-  const purchaseDebit  = purchases.reduce((s, x) => s + x.totalAmount, 0);
-  const payDebit       = payments.filter(p => p.voucherType === 'payment').reduce((s, p) => s + p.amount, 0);
-  const payCredit      = payments.filter(p => p.voucherType !== 'payment').reduce((s, p) => s + p.amount, 0);
-  return opening + purchaseDebit + payDebit - payCredit;
+  const opening       = computeSupplierOpeningBalance(storedBalance, purchases, payments, expenses);
+  const purchaseDebit = purchases.reduce((s, x) => s + x.totalAmount, 0);
+  const payDebit      = payments.filter(p => p.voucherType === 'payment').reduce((s, p) => s + p.amount, 0);
+  const payCredit     = payments.filter(p => p.voucherType !== 'payment').reduce((s, p) => s + p.amount, 0);
+  const expenseDebit  = expenses.filter(e => e.paymentMethod === 'credit').reduce((s, e) => s + e.amount, 0);
+  return opening + purchaseDebit + payDebit - payCredit + expenseDebit;
 }

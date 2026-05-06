@@ -2,7 +2,7 @@ import { useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowRight, Printer, Plus, X, ShoppingCart, CreditCard,
-  Wallet, FileText, AlertCircle, Pencil, Trash2, Lock,
+  Wallet, FileText, AlertCircle, Pencil, Trash2, Lock, Receipt,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { computeSupplierOpeningBalance } from '../utils/balance';
@@ -17,8 +17,8 @@ import VoucherModal from '../components/ui/VoucherModal';
 interface SupplierTransaction {
   id: string;
   date: string;
-  type: 'purchase' | 'payment';
-  voucherType: 'receipt' | 'payment' | 'purchase';
+  type: 'purchase' | 'payment' | 'expense';
+  voucherType: 'receipt' | 'payment' | 'purchase' | 'expense';
   reference: string;
   debit: number;
   credit: number;
@@ -40,7 +40,7 @@ export default function SupplierStatement() {
   const navigate = useNavigate();
   const toast    = useToast();
   const {
-    suppliers, purchases, supplierPayments,
+    suppliers, purchases, supplierPayments, expenses,
     addSupplierPayment, updateSupplierPayment, removeSupplierPayment,
   } = useData();
 
@@ -67,6 +67,10 @@ export default function SupplierStatement() {
   const { allTransactions, openingBalance } = useMemo(() => {
     if (!supplierId) return { allTransactions: [] as SupplierTransaction[], openingBalance: 0 };
 
+    const supplierExpenses = expenses.filter(
+      e => e.paymentMethod === 'credit' && e.supplierId === supplierId,
+    );
+
     const rows: Omit<SupplierTransaction, 'runningBalance'>[] = [
       ...purchases
         .filter(p => p.supplierId === supplierId)
@@ -84,7 +88,7 @@ export default function SupplierStatement() {
         .filter(p => p.supplierId === supplierId)
         .map(p => {
           const vt        = p.voucherType ?? 'payment';
-          const refLabel  = vt === 'receipt' ? 'سند قبض' : 'سند صرف';
+          const refLabel  = vt === 'receipt' ? 'إعطاء دفعة للمورد' : 'مبلغ غير مدفوع للمورد';
           const isReceipt = vt === 'receipt';
           return {
             id:          p.id,
@@ -99,6 +103,16 @@ export default function SupplierStatement() {
             isLinked:    !!p.relatedPurchaseId,
           };
         }),
+      ...supplierExpenses.map(e => ({
+        id:          e.id,
+        date:        e.date,
+        type:        'expense' as const,
+        voucherType: 'expense' as const,
+        reference:   `مصروف: ${e.title}`,
+        debit:       e.amount,
+        credit:      0,
+        isLinked:    false,
+      })),
     ];
 
     rows.sort((a, b) => {
@@ -112,11 +126,12 @@ export default function SupplierStatement() {
       supplier?.balance ?? 0,
       purchases.filter(p => p.supplierId === supplierId),
       supplierPayments.filter(p => p.supplierId === supplierId),
+      supplierExpenses,
     );
 
     let balance = openingBalance;
     const allTransactions = rows.map(row => {
-      if (row.type === 'purchase') {
+      if (row.type === 'purchase' || row.type === 'expense') {
         balance += row.debit;
       } else if (row.voucherType === 'receipt') {
         balance -= row.debit;
@@ -127,7 +142,7 @@ export default function SupplierStatement() {
     });
 
     return { allTransactions, openingBalance };
-  }, [supplierId, purchases, supplierPayments, supplier]);
+  }, [supplierId, purchases, supplierPayments, expenses, supplier]);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const summary = useMemo(() => {
@@ -543,18 +558,26 @@ function TypeBadge({ tx }: { tx: Pick<SupplierTransaction, 'type' | 'voucherType
       </span>
     );
   }
+  if (tx.type === 'expense') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium whitespace-nowrap">
+        <Receipt size={10} />
+        مصروف آجل
+      </span>
+    );
+  }
   if (tx.voucherType === 'receipt') {
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium whitespace-nowrap">
         <CreditCard size={10} />
-        سند قبض
+        إعطاء دفعة للمورد
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium whitespace-nowrap">
       <CreditCard size={10} />
-      سند صرف
+      مبلغ غير مدفوع للمورد
     </span>
   );
 }

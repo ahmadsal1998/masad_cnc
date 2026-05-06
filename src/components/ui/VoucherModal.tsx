@@ -55,16 +55,16 @@ function getJournalEntry(
       debitAccount:  cashAccount,
       creditAccount: entityAccount,
       description:   mode === 'customer'
-        ? 'سند قبض — استلام مبلغ من العميل، يُقيَّد دائناً لحسابه'
-        : 'سند قبض — استلام مبلغ من المورد (رد دين / تعديل)، يُقيَّد دائناً لحسابه',
+        ? 'إضافة دفعة للعميل — استلام مبلغ من العميل، يُقيَّد دائناً لحسابه'
+        : 'إعطاء دفعة للمورد — استلام مبلغ من المورد (رد دين / تعديل)، يُقيَّد دائناً لحسابه',
     };
   }
   return {
     debitAccount:  entityAccount,
     creditAccount: cashAccount,
     description:   mode === 'customer'
-      ? 'سند صرف — صرف مبلغ للعميل، يُقيَّد مديناً لحسابه'
-      : 'سند صرف — سداد مبلغ للمورد، يُقيَّد مديناً لحسابه',
+      ? 'إضافة دين على العميل — صرف مبلغ للعميل، يُقيَّد مديناً لحسابه'
+      : 'مبلغ غير مدفوع للمورد — سداد مبلغ للمورد، يُقيَّد مديناً لحسابه',
   };
 }
 
@@ -105,7 +105,9 @@ export default function VoucherModal({
 
   const journal = getJournalEntry(mode, voucherType, form.type, entityName);
 
-  const voucherLabel = voucherType === 'receipt' ? 'سند قبض' : 'سند صرف';
+  const voucherLabel = mode === 'customer'
+    ? (voucherType === 'receipt' ? 'إضافة دفعة للعميل' : 'إضافة دين على العميل')
+    : (voucherType === 'receipt' ? 'إعطاء دفعة للمورد' : 'مبلغ غير مدفوع للمورد');
 
   const headerBg  = voucherType === 'receipt' ? 'bg-blue-600'   : 'bg-orange-500';
   const btnClass  = voucherType === 'receipt' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600';
@@ -132,7 +134,7 @@ export default function VoucherModal({
                 : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
-            سند قبض
+            {mode === 'customer' ? 'إضافة دفعة للعميل' : 'إعطاء دفعة للمورد'}
           </button>
           <button
             onClick={() => setVoucherType('payment')}
@@ -142,7 +144,7 @@ export default function VoucherModal({
                 : 'text-gray-600 hover:bg-gray-50'
             }`}
           >
-            سند صرف
+            {mode === 'customer' ? 'إضافة دين على العميل' : 'مبلغ غير مدفوع للمورد'}
           </button>
         </div>
 

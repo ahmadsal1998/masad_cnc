@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDate } from '../utils/formatDate';
+import { fmt } from '../utils/numbers';
 import { useData } from '../context/DataContext';
 import {
   TrendingUp, ShoppingCart, Users, Truck,
-  DollarSign, AlertCircle, Loader2, Activity, Receipt
+  DollarSign, AlertCircle, Loader2, Activity, Receipt, CalendarRange, X, ChevronDown,
 } from 'lucide-react';
 
 interface StatCardProps {
@@ -12,55 +13,207 @@ interface StatCardProps {
   subtitle?: string;
   icon: React.ReactNode;
   colorBg: string;
-  trend?: 'up' | 'down' | 'neutral';
 }
 
 function StatCard({ title, value, subtitle, icon, colorBg }: StatCardProps) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
-      <div className={`p-3 rounded-xl shrink-0 ${colorBg}`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">{title}</p>
-        <p className="text-xl font-bold text-gray-800 leading-tight truncate">{value}</p>
-        {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
+    <div className="bg-white rounded-2xl border border-gray-100 p-3 sm:p-5 flex items-start gap-2 sm:gap-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${colorBg}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-400 mb-0.5 font-medium uppercase tracking-wide leading-tight">{title}</p>
+        <p className="text-base sm:text-xl font-bold text-gray-800 leading-tight break-all">{value}</p>
+        {subtitle && <p className="text-xs text-gray-400 mt-1 leading-tight">{subtitle}</p>}
       </div>
     </div>
   );
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const dateInputCls =
+  'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white ' +
+  'focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400';
+
+function DateFilterBar({
+  from, to,
+  onChange, onClear,
+}: {
+  from: string; to: string;
+  onChange: (from: string, to: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasFilter = !!(from || to);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+      {/* ── Mobile header (tap to expand) ── */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-4 py-3 sm:hidden"
+      >
+        <CalendarRange size={16} className="text-gray-400 shrink-0" />
+        <span className="text-sm font-medium text-gray-600 flex-1 text-right">تصفية بالتاريخ</span>
+        {hasFilter && (
+          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg font-medium">
+            مفعّل
+          </span>
+        )}
+        <ChevronDown
+          size={16}
+          className={`text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* ── Mobile expandable body ── */}
+      {open && (
+        <div className="sm:hidden px-4 pb-4 pt-1 border-t border-gray-50 space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs text-gray-400 font-medium">من</label>
+            <input
+              type="date"
+              value={from}
+              onChange={e => onChange(e.target.value, to)}
+              className={dateInputCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-gray-400 font-medium">إلى</label>
+            <input
+              type="date"
+              value={to}
+              onChange={e => onChange(from, e.target.value)}
+              className={dateInputCls}
+            />
+          </div>
+          {hasFilter && (
+            <button
+              onClick={onClear}
+              className="w-full flex items-center justify-center gap-1.5 text-sm text-red-500 bg-red-50 hover:bg-red-100 py-2 rounded-xl transition-colors"
+            >
+              <X size={14} />
+              مسح التصفية
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Desktop: always-visible single row ── */}
+      <div className="hidden sm:flex items-center gap-3 px-4 py-3">
+        <CalendarRange size={16} className="text-gray-400 shrink-0" />
+        <span className="text-sm font-medium text-gray-600 shrink-0">تصفية بالتاريخ</span>
+        <input
+          type="date"
+          value={from}
+          onChange={e => onChange(e.target.value, to)}
+          className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 w-36"
+        />
+        <span className="text-gray-400 text-sm">—</span>
+        <input
+          type="date"
+          value={to}
+          onChange={e => onChange(from, e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 w-36"
+        />
+        {hasFilter && (
+          <button
+            onClick={onClear}
+            className="flex items-center gap-1.5 text-xs text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-xl transition-colors"
+          >
+            <X size={12} />
+            مسح
+          </button>
+        )}
+        {hasFilter && (
+          <span className="text-xs text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg font-medium">
+            نتائج مفلترة
+          </span>
+        )}
+      </div>
+
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const { employees, customers, suppliers, purchases, sales, expenses, supplierPayments, customerPayments, syncStatus } = useData();
+  const {
+    employees, customers, suppliers,
+    purchases, sales, expenses,
+    supplierPayments, customerPayments,
+    syncStatus,
+  } = useData();
+
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo,   setDateTo]   = useState('');
+
+  const isFiltered = dateFrom || dateTo;
+
+  const filteredSales = useMemo(() => {
+    if (!isFiltered) return sales;
+    return sales.filter(x => {
+      if (dateFrom && x.date < dateFrom) return false;
+      if (dateTo   && x.date > dateTo)   return false;
+      return true;
+    });
+  }, [sales, dateFrom, dateTo, isFiltered]);
+
+  const filteredPurchases = useMemo(() => {
+    if (!isFiltered) return purchases;
+    return purchases.filter(x => {
+      if (dateFrom && x.date < dateFrom) return false;
+      if (dateTo   && x.date > dateTo)   return false;
+      return true;
+    });
+  }, [purchases, dateFrom, dateTo, isFiltered]);
+
+  const filteredExpenses = useMemo(() => {
+    if (!isFiltered) return expenses;
+    return expenses.filter(x => {
+      if (dateFrom && x.date < dateFrom) return false;
+      if (dateTo   && x.date > dateTo)   return false;
+      return true;
+    });
+  }, [expenses, dateFrom, dateTo, isFiltered]);
+
+  const filteredCustomerPayments = useMemo(() => {
+    if (!isFiltered) return customerPayments;
+    return customerPayments.filter(x => {
+      if (dateFrom && x.date < dateFrom) return false;
+      if (dateTo   && x.date > dateTo)   return false;
+      return true;
+    });
+  }, [customerPayments, dateFrom, dateTo, isFiltered]);
+
+  const filteredSupplierPayments = useMemo(() => {
+    if (!isFiltered) return supplierPayments;
+    return supplierPayments.filter(x => {
+      if (dateFrom && x.date < dateFrom) return false;
+      if (dateTo   && x.date > dateTo)   return false;
+      return true;
+    });
+  }, [supplierPayments, dateFrom, dateTo, isFiltered]);
 
   const stats = useMemo(() => {
-    const totalSales      = sales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    // Collected from customers: all customer_payments linked to a sale (cash sales) + standalone payments
-    const collectedSales  = customerPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
-    const totalPurchases  = purchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    // Paid to suppliers: all supplier_payments linked to a purchase (cash purchases) + standalone payments
-    const paidPurchases   = supplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
-    const customerDebts   = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
-    const supplierDebts   = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
-    const totalExpenses   = expenses.reduce((s, x) => s + (x.amount ?? 0), 0);
-    const todayStr        = new Date().toISOString().split('T')[0];
-    const monthStr        = todayStr.slice(0, 7);
-    const todayExpenses   = expenses.filter(e => e.date === todayStr).reduce((s, x) => s + (x.amount ?? 0), 0);
-    const monthlyExpenses = expenses.filter(e => e.date?.startsWith(monthStr)).reduce((s, x) => s + (x.amount ?? 0), 0);
-    const netProfit       = totalSales - totalPurchases - totalExpenses;
+    const totalSales     = filteredSales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const collectedSales = filteredCustomerPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
+    const totalPurchases = filteredPurchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const paidPurchases  = filteredSupplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
+    // Debts are running balances — not sliceable by date without full ledger replay
+    const customerDebts  = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
+    const supplierDebts  = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
+    const totalExpenses  = filteredExpenses.reduce((s, x) => s + (x.amount ?? 0), 0);
+    const netProfit      = totalSales - totalPurchases - totalExpenses;
     return {
       totalSales, collectedSales, totalPurchases, paidPurchases,
-      customerDebts, supplierDebts, totalExpenses, todayExpenses, monthlyExpenses, netProfit,
+      customerDebts, supplierDebts, totalExpenses, netProfit,
     };
-  }, [sales, purchases, supplierPayments, customerPayments, customers, suppliers, expenses]);
+  }, [filteredSales, filteredPurchases, filteredExpenses, filteredCustomerPayments, filteredSupplierPayments, customers, suppliers]);
 
-  const recentSales     = useMemo(() => [...sales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [sales]);
-  const recentPurchases = useMemo(() => [...purchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [purchases]);
+  const recentSales     = useMemo(() => [...filteredSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredSales]);
+  const recentPurchases = useMemo(() => [...filteredPurchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredPurchases]);
 
   return (
     <div dir="rtl" className="space-y-5">
-      {/* Status banners */}
       {syncStatus.loading && (
         <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-4 py-2.5 rounded-xl w-fit">
           <Loader2 size={14} className="animate-spin" />
@@ -74,32 +227,39 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Stats — 2 cols on mobile, 4 on desktop */}
+      <DateFilterBar
+        from={dateFrom}
+        to={dateTo}
+        onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+        onClear={() => { setDateFrom(''); setDateTo(''); }}
+      />
+
+      {/* Primary stats — 2 cols on mobile, 4 on desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <StatCard
           title="إجمالي المبيعات"
-          value={`${fmt(stats.totalSales)}`}
+          value={fmt(stats.totalSales)}
           subtitle={`محصّل: ${fmt(stats.collectedSales)}`}
           icon={<TrendingUp size={20} className="text-emerald-600" />}
           colorBg="bg-emerald-50"
         />
         <StatCard
           title="إجمالي المشتريات"
-          value={`${fmt(stats.totalPurchases)}`}
+          value={fmt(stats.totalPurchases)}
           subtitle={`مدفوع: ${fmt(stats.paidPurchases)}`}
           icon={<ShoppingCart size={20} className="text-blue-600" />}
           colorBg="bg-blue-50"
         />
         <StatCard
           title="ديون العملاء"
-          value={`${fmt(stats.customerDebts)}`}
+          value={fmt(stats.customerDebts)}
           subtitle={`${customers.length} عميل`}
           icon={<Users size={20} className="text-orange-500" />}
           colorBg="bg-orange-50"
         />
         <StatCard
           title="مستحقات الموردين"
-          value={`${fmt(stats.supplierDebts)}`}
+          value={fmt(stats.supplierDebts)}
           subtitle={`مدفوع: ${fmt(stats.paidPurchases)}`}
           icon={<Truck size={20} className="text-purple-600" />}
           colorBg="bg-purple-50"
@@ -118,7 +278,6 @@ export default function Dashboard() {
         <StatCard
           title="إجمالي المصروفات"
           value={fmt(stats.totalExpenses)}
-          subtitle={`اليوم: ${fmt(stats.todayExpenses)} · الشهر: ${fmt(stats.monthlyExpenses)}`}
           icon={<Receipt size={20} className="text-red-500" />}
           colorBg="bg-red-50"
         />
@@ -131,8 +290,8 @@ export default function Dashboard() {
         />
         <StatCard
           title="النشاط"
-          value={String(sales.length + purchases.length)}
-          subtitle={`${sales.length} مبيعات · ${purchases.length} مشتريات`}
+          value={String(filteredSales.length + filteredPurchases.length)}
+          subtitle={`${filteredSales.length} مبيعات · ${filteredPurchases.length} مشتريات`}
           icon={<Activity size={20} className="text-teal-600" />}
           colorBg="bg-teal-50"
         />
@@ -151,8 +310,8 @@ interface RecentRow {
   id: string;
   date: string;
   totalAmount: number;
-  paidAmount?: number;        // used by sales
-  paymentType?: 'cash' | 'credit'; // used by purchases
+  paidAmount?: number;
+  paymentType?: 'cash' | 'credit';
   customerName?: string;
   supplierName?: string;
 }

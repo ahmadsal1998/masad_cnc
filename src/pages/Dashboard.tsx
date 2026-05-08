@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatDate } from '../utils/formatDate';
 import { fmt } from '../utils/numbers';
 import { useData } from '../context/DataContext';
+import { computeCustomerCurrentBalance, computeSupplierCurrentBalance } from '../utils/balance';
 import {
   TrendingUp, ShoppingCart, Users, Truck,
   DollarSign, AlertCircle, Loader2, Activity, Receipt, CalendarRange, X, ChevronDown,
@@ -198,16 +199,39 @@ export default function Dashboard() {
     const collectedSales = filteredCustomerPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
     const totalPurchases = filteredPurchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
     const paidPurchases  = filteredSupplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
-    // Debts are running balances — not sliceable by date without full ledger replay
-    const customerDebts  = customers.reduce((s, x) => s + (x.balance ?? 0), 0);
-    const supplierDebts  = suppliers.reduce((s, x) => s + (x.balance ?? 0), 0);
+    // Debts are running balances — not sliceable by date without full ledger replay.
+    // Stored `balance` over-counts cash transactions (see utils/balance.ts) — must
+    // be reconciled via compute*CurrentBalance to subtract sale-/purchase-linked
+    // auto-payments, otherwise cash sales appear as customer debt on the dashboard.
+    const customerDebts  = customers.reduce(
+      (s, c) => s + computeCustomerCurrentBalance(
+        c.balance,
+        sales.filter(x => x.customerId === c.id),
+        customerPayments.filter(p => p.customerId === c.id),
+      ),
+      0,
+    );
+    const supplierDebts  = suppliers.reduce(
+      (s, sup) => s + computeSupplierCurrentBalance(
+        sup.balance,
+        purchases.filter(x => x.supplierId === sup.id),
+        supplierPayments.filter(p => p.supplierId === sup.id),
+        expenses.filter(e => e.supplierId === sup.id),
+      ),
+      0,
+    );
     const totalExpenses  = filteredExpenses.reduce((s, x) => s + (x.amount ?? 0), 0);
     const netProfit      = totalSales - totalPurchases - totalExpenses;
     return {
       totalSales, collectedSales, totalPurchases, paidPurchases,
       customerDebts, supplierDebts, totalExpenses, netProfit,
     };
-  }, [filteredSales, filteredPurchases, filteredExpenses, filteredCustomerPayments, filteredSupplierPayments, customers, suppliers]);
+  }, [
+    filteredSales, filteredPurchases, filteredExpenses,
+    filteredCustomerPayments, filteredSupplierPayments,
+    customers, suppliers,
+    sales, purchases, customerPayments, supplierPayments, expenses,
+  ]);
 
   const recentSales     = useMemo(() => [...filteredSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredSales]);
   const recentPurchases = useMemo(() => [...filteredPurchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredPurchases]);
@@ -234,8 +258,8 @@ export default function Dashboard() {
         onClear={() => { setDateFrom(''); setDateTo(''); }}
       />
 
-      {/* Primary stats — 2 cols on mobile, 4 on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+      {/* Primary stats — 2 cols on mobile, 5 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
         <StatCard
           title="إجمالي المبيعات"
           value={fmt(stats.totalSales)}
@@ -246,7 +270,7 @@ export default function Dashboard() {
         <StatCard
           title="إجمالي المشتريات"
           value={fmt(stats.totalPurchases)}
-          subtitle={`مدفوع: ${fmt(stats.paidPurchases)}`}
+          subtitle={`${filteredPurchases.length} فاتورة`}
           icon={<ShoppingCart size={20} className="text-blue-600" />}
           colorBg="bg-blue-50"
         />
@@ -258,11 +282,18 @@ export default function Dashboard() {
           colorBg="bg-orange-50"
         />
         <StatCard
-          title="مستحقات الموردين"
+          title="ذمم الموردين"
           value={fmt(stats.supplierDebts)}
-          subtitle={`مدفوع: ${fmt(stats.paidPurchases)}`}
+          subtitle={`${suppliers.length} مورد`}
           icon={<Truck size={20} className="text-purple-600" />}
           colorBg="bg-purple-50"
+        />
+        <StatCard
+          title="مدفوعات الموردين"
+          value={fmt(stats.paidPurchases)}
+          subtitle={`${filteredSupplierPayments.length} سند`}
+          icon={<DollarSign size={20} className="text-sky-600" />}
+          colorBg="bg-sky-50"
         />
       </div>
 

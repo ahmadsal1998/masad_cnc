@@ -7,6 +7,7 @@ import {
 import { useData } from '../context/DataContext';
 import { computeSupplierOpeningBalance } from '../utils/balance';
 import { formatDate } from '../utils/formatDate';
+import { fmt } from '../utils/numbers';
 import { useToast } from '../context/ToastContext';
 import { generateId } from '../utils/hash';
 import type { SupplierPayment } from '../types';
@@ -27,9 +28,6 @@ interface SupplierTransaction {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 const today = () => new Date().toISOString().split('T')[0];
 

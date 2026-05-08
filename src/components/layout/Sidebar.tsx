@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { to: '/suppliers',  icon: Truck,           label: 'الموردون',    end: false },
   { to: '/purchases',  icon: ShoppingCart,    label: 'المشتريات',   end: false },
   { to: '/sales',      icon: TrendingUp,      label: 'المبيعات',    end: false },
-  { to: '/expenses',   icon: Receipt,         label: 'المصروفات',   end: false },
+  { to: '/expenses',     icon: Receipt,         label: 'المصروفات',   end: false },
 ];
 
 export default function Sidebar() {

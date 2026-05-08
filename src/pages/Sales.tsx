@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, TrendingUp, DollarSign, CreditCard, Banknote, Calendar, CalendarRange } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import type { Sale, SaleItem } from '../types';
 import { generateId } from '../utils/hash';
 import { formatDate } from '../utils/formatDate';
+import { fmt } from '../utils/numbers';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import FilterBar, { type FilterField } from '../components/ui/FilterBar';
+import StatCard from '../components/ui/StatCard';
 
 const EMPTY_ITEM: SaleItem = { description: '', quantity: 1, unitPrice: 0, total: 0 };
 
@@ -33,11 +35,11 @@ const EMPTY_FILTERS: Record<string, string> = {
   customerId:  '',
 };
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const today       = new Date().toISOString().split('T')[0];
+const monthPrefix = today.slice(0, 7);
 
 export default function Sales() {
-  const { sales, customers, addSale, updateSale, removeSale } = useData();
+  const { sales, customers, customerPayments, addSale, updateSale, removeSale } = useData();
   const toast = useToast();
 
   // ── Filters ───────────────────────────────────────────────────────────────
@@ -67,6 +69,34 @@ export default function Sales() {
       return true;
     });
   }, [sales, filters]);
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const totalAmount  = filtered.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const cashCount    = filtered.filter(x => x.paymentType === 'cash').length;
+    const creditCount  = filtered.filter(x => x.paymentType === 'credit').length;
+
+    // Collected in the same date window as the filter
+    const dfFrom = filters.dateFrom;
+    const dfTo   = filters.dateTo;
+    const collected = customerPayments
+      .filter(p => p.voucherType !== 'payment')
+      .filter(p => {
+        if (dfFrom && p.date < dfFrom) return false;
+        if (dfTo   && p.date > dfTo)   return false;
+        return true;
+      })
+      .reduce((s, p) => s + (p.amount ?? 0), 0);
+
+    const remaining = Math.max(0, totalAmount - collected);
+
+    const todayAmount = sales.filter(x => x.date === today).reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const todayCount  = sales.filter(x => x.date === today).length;
+    const monthAmount = sales.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const monthCount  = sales.filter(x => x.date.startsWith(monthPrefix)).length;
+
+    return { totalAmount, cashCount, creditCount, collected, remaining, todayAmount, todayCount, monthAmount, monthCount };
+  }, [filtered, customerPayments, filters.dateFrom, filters.dateTo, sales]);
 
   // ── Form ──────────────────────────────────────────────────────────────────
   const [form, setForm] = useState(EMPTY_FORM);
@@ -193,6 +223,67 @@ export default function Sales() {
         onAdd={openAdd}
         addLabel="إضافة فاتورة بيع"
       />
+
+      {/* Stats row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+        <StatCard
+          title="إجمالي الفواتير"
+          value={String(filtered.length)}
+          subtitle={`من ${sales.length} فاتورة`}
+          icon={<TrendingUp size={20} className="text-emerald-600" />}
+          colorBg="bg-emerald-50"
+        />
+        <StatCard
+          title="إجمالي المبيعات"
+          value={`${fmt(stats.totalAmount)} ₪`}
+          icon={<DollarSign size={20} className="text-blue-600" />}
+          colorBg="bg-blue-50"
+        />
+        <StatCard
+          title="المبالغ المحصّلة"
+          value={`${fmt(stats.collected)} ₪`}
+          icon={<Banknote size={20} className="text-teal-600" />}
+          colorBg="bg-teal-50"
+        />
+        <StatCard
+          title="المتبقي (ذمم)"
+          value={`${fmt(stats.remaining)} ₪`}
+          icon={<CreditCard size={20} className="text-orange-500" />}
+          colorBg="bg-orange-50"
+        />
+      </div>
+
+      {/* Stats row 2 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard
+          title="مبيعات نقدية"
+          value={String(stats.cashCount)}
+          subtitle="فاتورة"
+          icon={<Banknote size={20} className="text-green-600" />}
+          colorBg="bg-green-50"
+        />
+        <StatCard
+          title="مبيعات آجلة"
+          value={String(stats.creditCount)}
+          subtitle="فاتورة"
+          icon={<CreditCard size={20} className="text-amber-600" />}
+          colorBg="bg-amber-50"
+        />
+        <StatCard
+          title="مبيعات اليوم"
+          value={`${fmt(stats.todayAmount)} ₪`}
+          subtitle={`${stats.todayCount} فاتورة`}
+          icon={<Calendar size={20} className="text-sky-600" />}
+          colorBg="bg-sky-50"
+        />
+        <StatCard
+          title="مبيعات هذا الشهر"
+          value={`${fmt(stats.monthAmount)} ₪`}
+          subtitle={`${stats.monthCount} فاتورة`}
+          icon={<CalendarRange size={20} className="text-violet-600" />}
+          colorBg="bg-violet-50"
+        />
+      </div>
 
       <FilterBar
         config={filterConfig}

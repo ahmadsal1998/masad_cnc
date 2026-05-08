@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Receipt, ArrowLeftRight } from 'lucide-react';
 import Modal from './Modal';
 import { FormField, Input, Select, TextArea } from './FormField';
+import { fmt } from '../../utils/numbers';
 
 type PaymentMethod = 'cash' | 'bank' | 'transfer';
 type VoucherKind   = 'receipt' | 'payment';
@@ -27,9 +28,6 @@ interface VoucherModalProps {
     voucherType: VoucherKind;
   }) => void;
 }
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 const today = () => new Date().toISOString().split('T')[0];
 

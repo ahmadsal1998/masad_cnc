@@ -7,6 +7,7 @@ import {
 import { useData } from '../context/DataContext';
 import { computeCustomerOpeningBalance } from '../utils/balance';
 import { formatDate } from '../utils/formatDate';
+import { fmt } from '../utils/numbers';
 import { generateId } from '../utils/hash';
 import type { CustomerPayment } from '../types';
 import VoucherModal from '../components/ui/VoucherModal';
@@ -26,9 +27,6 @@ interface CustomerTransaction {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -81,7 +79,7 @@ export default function CustomerStatement() {
       ...customerPayments
         .filter(p => p.customerId === customerId)
         .map(p => {
-          const vt       = p.voucherType ?? 'receipt';
+          const vt       = p.voucherType || 'receipt';
           const isDebit  = vt === 'payment';
           const refLabel = isDebit ? 'إضافة دين على العميل' : 'إضافة دفعة للعميل';
           return {
@@ -124,7 +122,7 @@ export default function CustomerStatement() {
   // ── Summary stats ─────────────────────────────────────────────────────────
   const summary = useMemo(() => {
     const totalSales    = allTransactions.filter(t => t.type === 'sale').reduce((s, t) => s + t.debit, 0);
-    const totalReceipts = allTransactions.filter(t => t.voucherType === 'receipt').reduce((s, t) => s + t.credit, 0);
+    const totalReceipts = allTransactions.filter(t => t.type === 'payment' && t.credit > 0).reduce((s, t) => s + t.credit, 0);
     const balance       = allTransactions.length > 0
       ? allTransactions[allTransactions.length - 1].runningBalance
       : openingBalance;
@@ -314,7 +312,7 @@ export default function CustomerStatement() {
                   <CreditCard size={16} className="text-emerald-600" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-gray-400 truncate">إجمالي سندات القبض</p>
+                  <p className="text-xs text-gray-400 truncate">إجمالي المدفوعات المستلمة</p>
                   <p className="text-sm font-bold text-gray-800">{fmt(summary.totalPayments)} ₪</p>
                 </div>
               </div>
@@ -468,7 +466,7 @@ export default function CustomerStatement() {
               <div className="space-y-1">
                 <p>الرصيد الافتتاحي: <strong>{fmt(openingBalance)} ₪</strong></p>
                 <p>إجمالي المبيعات: <strong>{fmt(summary.totalSales)} ₪</strong></p>
-                <p>إجمالي سندات القبض: <strong>{fmt(summary.totalPayments)} ₪</strong></p>
+                <p>إجمالي المدفوعات المستلمة: <strong>{fmt(summary.totalPayments)} ₪</strong></p>
               </div>
               <div className="text-left">
                 <p className={`text-lg font-bold ${balanceColor}`}>

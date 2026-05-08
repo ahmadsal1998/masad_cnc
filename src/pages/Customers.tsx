@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText } from 'lucide-react';
+import { FileText, Users, UserCheck, Banknote, TrendingUp, Star, UserX } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import type { Customer } from '../types';
 import { generateId } from '../utils/hash';
 import { computeCustomerCurrentBalance } from '../utils/balance';
 import { toStr } from '../utils/form';
+import { fmt } from '../utils/numbers';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea } from '../components/ui/FormField';
 import FilterBar, { type FilterField } from '../components/ui/FilterBar';
+import StatCard from '../components/ui/StatCard';
 
 const EMPTY_FORM = {
   name:    '',
@@ -41,6 +43,7 @@ const FILTER_CONFIG: FilterField[] = [
 export default function Customers() {
   const { customers, sales, customerPayments, addCustomer, updateCustomer, removeCustomer } = useData();
 
+
   const [filters, setFilters]       = useState<Record<string, string>>(EMPTY_FILTERS);
   const [modalOpen, setModalOpen]   = useState(false);
   const [editingId, setEditingId]   = useState<string | null>(null);
@@ -62,6 +65,31 @@ export default function Customers() {
     }
     return map;
   }, [customers, sales, customerPayments]);
+
+  const custStats = useMemo(() => {
+    const withDebt   = [...balanceMap.values()].filter(b => b > 0).length;
+    const settled    = [...balanceMap.values()].filter(b => b === 0).length;
+    const totalDebt  = [...balanceMap.values()].filter(b => b > 0).reduce((s, b) => s + b, 0);
+    const collected  = customerPayments
+      .filter(p => p.voucherType !== 'payment')
+      .reduce((s, p) => s + (p.amount ?? 0), 0);
+
+    // Top customer by total sales amount
+    const salesByCustomer = new Map<string, number>();
+    for (const s of sales) {
+      salesByCustomer.set(s.customerId, (salesByCustomer.get(s.customerId) ?? 0) + (s.totalAmount ?? 0));
+    }
+    let topName = '—';
+    let topAmt  = 0;
+    for (const [cid, amt] of salesByCustomer) {
+      if (amt > topAmt) {
+        topAmt = amt;
+        topName = customers.find(c => c.id === cid)?.name ?? '—';
+      }
+    }
+
+    return { withDebt, settled, totalDebt, collected, topName, topAmt };
+  }, [balanceMap, customerPayments, sales, customers]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -151,7 +179,7 @@ export default function Customers() {
         const bal = balanceMap.get(row.id) ?? 0;
         return (
           <span className={bal === 0 ? 'text-green-600 font-medium' : 'text-orange-500 font-medium'}>
-            {bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₪
+            {fmt(bal)} ₪
           </span>
         );
       },
@@ -180,6 +208,54 @@ export default function Customers() {
         onAdd={openAdd}
         addLabel="إضافة عميل"
       />
+
+      {/* Stats row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+        <StatCard
+          title="إجمالي العملاء"
+          value={String(customers.length)}
+          subtitle={`${custStats.settled} مسوّى`}
+          icon={<Users size={20} className="text-blue-600" />}
+          colorBg="bg-blue-50"
+        />
+        <StatCard
+          title="عملاء مديونون"
+          value={String(custStats.withDebt)}
+          subtitle="لديهم رصيد مستحق"
+          icon={<UserX size={20} className="text-orange-500" />}
+          colorBg="bg-orange-50"
+        />
+        <StatCard
+          title="إجمالي الديون"
+          value={`${fmt(custStats.totalDebt)} ₪`}
+          icon={<Banknote size={20} className="text-red-500" />}
+          colorBg="bg-red-50"
+        />
+        <StatCard
+          title="إجمالي التحصيلات"
+          value={`${fmt(custStats.collected)} ₪`}
+          icon={<TrendingUp size={20} className="text-emerald-600" />}
+          colorBg="bg-emerald-50"
+        />
+      </div>
+
+      {/* Stats row 2 */}
+      <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 mb-5">
+        <StatCard
+          title="أعلى عميل مشتريات"
+          value={custStats.topName}
+          subtitle={`${fmt(custStats.topAmt)} ₪ إجمالي مشتريات`}
+          icon={<Star size={20} className="text-yellow-500" />}
+          colorBg="bg-yellow-50"
+        />
+        <StatCard
+          title="عملاء مسوّون"
+          value={String(custStats.settled)}
+          subtitle="حسابات مصفّاة"
+          icon={<UserCheck size={20} className="text-teal-600" />}
+          colorBg="bg-teal-50"
+        />
+      </div>
 
       <FilterBar
         config={FILTER_CONFIG}

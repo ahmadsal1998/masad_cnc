@@ -2,32 +2,11 @@ import { useMemo, useState } from 'react';
 import { formatDate } from '../utils/formatDate';
 import { fmt } from '../utils/numbers';
 import { useData } from '../context/DataContext';
-import { computeCustomerCurrentBalance, computeSupplierCurrentBalance } from '../utils/balance';
 import {
-  TrendingUp, ShoppingCart, Users, Truck,
-  DollarSign, AlertCircle, Loader2, Activity, Receipt, CalendarRange, X, ChevronDown,
+  DollarSign, AlertCircle, Loader2, Receipt, CalendarRange, X, ChevronDown,
+  Calendar, TrendingDown, Users,
 } from 'lucide-react';
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  subtitle?: string;
-  icon: React.ReactNode;
-  colorBg: string;
-}
-
-function StatCard({ title, value, subtitle, icon, colorBg }: StatCardProps) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-3 sm:p-5 flex items-start gap-2 sm:gap-4 shadow-sm hover:shadow-md transition-shadow">
-      <div className={`p-2 sm:p-3 rounded-xl shrink-0 ${colorBg}`}>{icon}</div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-400 mb-0.5 font-medium uppercase tracking-wide leading-tight">{title}</p>
-        <p className="text-base sm:text-xl font-bold text-gray-800 leading-tight break-all">{value}</p>
-        {subtitle && <p className="text-xs text-gray-400 mt-1 leading-tight">{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
+import StatCard from '../components/ui/StatCard';
 
 const dateInputCls =
   'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white ' +
@@ -138,9 +117,8 @@ function DateFilterBar({
 
 export default function Dashboard() {
   const {
-    employees, customers, suppliers,
-    purchases, sales, expenses,
-    supplierPayments, customerPayments,
+    customers, purchases, sales, expenses,
+    customerPayments,
     syncStatus,
   } = useData();
 
@@ -176,64 +154,49 @@ export default function Dashboard() {
     });
   }, [expenses, dateFrom, dateTo, isFiltered]);
 
-  const filteredCustomerPayments = useMemo(() => {
-    if (!isFiltered) return customerPayments;
-    return customerPayments.filter(x => {
-      if (dateFrom && x.date < dateFrom) return false;
-      if (dateTo   && x.date > dateTo)   return false;
-      return true;
-    });
-  }, [customerPayments, dateFrom, dateTo, isFiltered]);
-
-  const filteredSupplierPayments = useMemo(() => {
-    if (!isFiltered) return supplierPayments;
-    return supplierPayments.filter(x => {
-      if (dateFrom && x.date < dateFrom) return false;
-      if (dateTo   && x.date > dateTo)   return false;
-      return true;
-    });
-  }, [supplierPayments, dateFrom, dateTo, isFiltered]);
+  const today       = new Date().toISOString().split('T')[0];
+  const monthPrefix = today.slice(0, 7);
 
   const stats = useMemo(() => {
     const totalSales     = filteredSales.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const collectedSales = filteredCustomerPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
     const totalPurchases = filteredPurchases.reduce((s, x) => s + (x.totalAmount ?? 0), 0);
-    const paidPurchases  = filteredSupplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
-    // Debts are running balances — not sliceable by date without full ledger replay.
-    // Stored `balance` over-counts cash transactions (see utils/balance.ts) — must
-    // be reconciled via compute*CurrentBalance to subtract sale-/purchase-linked
-    // auto-payments, otherwise cash sales appear as customer debt on the dashboard.
-    const customerDebts  = customers.reduce(
-      (s, c) => s + computeCustomerCurrentBalance(
-        c.balance,
-        sales.filter(x => x.customerId === c.id),
-        customerPayments.filter(p => p.customerId === c.id),
-      ),
-      0,
-    );
-    const supplierDebts  = suppliers.reduce(
-      (s, sup) => s + computeSupplierCurrentBalance(
-        sup.balance,
-        purchases.filter(x => x.supplierId === sup.id),
-        supplierPayments.filter(p => p.supplierId === sup.id),
-        expenses.filter(e => e.supplierId === sup.id),
-      ),
-      0,
-    );
     const totalExpenses  = filteredExpenses.reduce((s, x) => s + (x.amount ?? 0), 0);
     const netProfit      = totalSales - totalPurchases - totalExpenses;
+
+    const todaySalesAmt  = sales.filter(x => x.date === today).reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const todaySalesCount = sales.filter(x => x.date === today).length;
+    const monthSalesAmt  = sales.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+    const monthSalesCount = sales.filter(x => x.date.startsWith(monthPrefix)).length;
+    const monthExpenses  = expenses.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.amount ?? 0), 0);
+    const monthProfit    = monthSalesAmt - expenses.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.amount ?? 0), 0)
+                          - purchases.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.totalAmount ?? 0), 0);
+
     return {
-      totalSales, collectedSales, totalPurchases, paidPurchases,
-      customerDebts, supplierDebts, totalExpenses, netProfit,
+      totalExpenses, netProfit,
+      todaySalesAmt, todaySalesCount, monthSalesAmt, monthSalesCount,
+      monthExpenses, monthProfit,
     };
   }, [
     filteredSales, filteredPurchases, filteredExpenses,
-    filteredCustomerPayments, filteredSupplierPayments,
-    customers, suppliers,
-    sales, purchases, customerPayments, supplierPayments, expenses,
+    sales, purchases, expenses,
+    today, monthPrefix,
   ]);
 
-  const recentSales     = useMemo(() => [...filteredSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredSales]);
+  const customerAccounts = useMemo(() => {
+    return customers
+      .map(c => {
+        const custSales    = sales.filter(s => s.customerId === c.id);
+        const custPayments = customerPayments.filter(p => p.customerId === c.id);
+        const totalSales   = custSales.reduce((sum, s) => sum + (s.totalAmount ?? 0), 0);
+        const totalPayments = custPayments.reduce(
+          (sum, p) => sum + (p.voucherType === 'payment' ? -(p.amount ?? 0) : (p.amount ?? 0)),
+          0,
+        );
+        return { id: c.id, name: c.name, totalSales, totalPayments, remaining: totalSales - totalPayments };
+      })
+      .sort((a, b) => b.remaining - a.remaining);
+  }, [customers, sales, customerPayments]);
+
   const recentPurchases = useMemo(() => [...filteredPurchases].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [filteredPurchases]);
 
   return (
@@ -258,46 +221,7 @@ export default function Dashboard() {
         onClear={() => { setDateFrom(''); setDateTo(''); }}
       />
 
-      {/* Primary stats — 2 cols on mobile, 5 on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
-        <StatCard
-          title="إجمالي المبيعات"
-          value={fmt(stats.totalSales)}
-          subtitle={`محصّل: ${fmt(stats.collectedSales)}`}
-          icon={<TrendingUp size={20} className="text-emerald-600" />}
-          colorBg="bg-emerald-50"
-        />
-        <StatCard
-          title="إجمالي المشتريات"
-          value={fmt(stats.totalPurchases)}
-          subtitle={`${filteredPurchases.length} فاتورة`}
-          icon={<ShoppingCart size={20} className="text-blue-600" />}
-          colorBg="bg-blue-50"
-        />
-        <StatCard
-          title="ديون العملاء"
-          value={fmt(stats.customerDebts)}
-          subtitle={`${customers.length} عميل`}
-          icon={<Users size={20} className="text-orange-500" />}
-          colorBg="bg-orange-50"
-        />
-        <StatCard
-          title="ذمم الموردين"
-          value={fmt(stats.supplierDebts)}
-          subtitle={`${suppliers.length} مورد`}
-          icon={<Truck size={20} className="text-purple-600" />}
-          colorBg="bg-purple-50"
-        />
-        <StatCard
-          title="مدفوعات الموردين"
-          value={fmt(stats.paidPurchases)}
-          subtitle={`${filteredSupplierPayments.length} سند`}
-          icon={<DollarSign size={20} className="text-sky-600" />}
-          colorBg="bg-sky-50"
-        />
-      </div>
-
-      {/* Secondary stats — 2 cols on mobile, 4 on desktop */}
+      {/* Stats — 2 cols on mobile, 4 on desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <StatCard
           title="صافي الربح"
@@ -309,33 +233,121 @@ export default function Dashboard() {
         <StatCard
           title="إجمالي المصروفات"
           value={fmt(stats.totalExpenses)}
+          subtitle={`${filteredSales.length + filteredPurchases.length} معاملة`}
           icon={<Receipt size={20} className="text-red-500" />}
           colorBg="bg-red-50"
         />
         <StatCard
-          title="الموظفون"
-          value={String(employees.length)}
-          subtitle="موظف نشط"
-          icon={<Users size={20} className="text-indigo-600" />}
-          colorBg="bg-indigo-50"
+          title="مبيعات اليوم"
+          value={fmt(stats.todaySalesAmt)}
+          subtitle={`${stats.todaySalesCount} فاتورة`}
+          icon={<Calendar size={20} className="text-teal-600" />}
+          colorBg="bg-teal-50"
         />
         <StatCard
-          title="النشاط"
-          value={String(filteredSales.length + filteredPurchases.length)}
-          subtitle={`${filteredSales.length} مبيعات · ${filteredPurchases.length} مشتريات`}
-          icon={<Activity size={20} className="text-teal-600" />}
-          colorBg="bg-teal-50"
+          title="ربح هذا الشهر"
+          value={fmt(stats.monthProfit)}
+          subtitle={`${stats.monthSalesCount} فاتورة · ${fmt(stats.monthSalesAmt)} مبيعات`}
+          icon={<TrendingDown size={20} className={stats.monthProfit >= 0 ? 'text-violet-600' : 'text-red-500'} />}
+          colorBg={stats.monthProfit >= 0 ? 'bg-violet-50' : 'bg-red-50'}
         />
       </div>
 
-      {/* Recent tables — stacked on mobile, side by side on lg */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecentTable title="آخر المبيعات" rows={recentSales} type="sale" />
-        <RecentTable title="آخر المشتريات" rows={recentPurchases} type="purchase" />
-      </div>
+      {/* Customer accounts */}
+      <CustomerAccountsTable rows={customerAccounts} loading={syncStatus.loading} />
+
+      {/* Recent purchases */}
+      <RecentTable title="آخر المشتريات" rows={recentPurchases} type="purchase" />
     </div>
   );
 }
+
+// ── Customer Accounts ────────────────────────────────────────────────────────
+
+interface CustomerAccountRow {
+  id: string;
+  name: string;
+  totalSales: number;
+  totalPayments: number;
+  remaining: number;
+}
+
+function CustomerAccountsTable({ rows, loading }: { rows: CustomerAccountRow[]; loading: boolean }) {
+  const balanceColor = (r: number) =>
+    r <= 0 ? 'text-emerald-600' : r < 1000 ? 'text-yellow-600' : 'text-red-500';
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+      <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
+        <Users size={16} className="text-blue-500 shrink-0" />
+        <h3 className="font-semibold text-gray-700 text-sm">حسابات العملاء</h3>
+        {rows.length > 0 && (
+          <span className="mr-auto text-xs text-gray-400 bg-gray-50 px-2.5 py-0.5 rounded-lg font-medium">
+            {rows.length} عميل
+          </span>
+        )}
+      </div>
+
+      {loading && rows.length === 0 ? (
+        <div className="py-10 flex justify-center">
+          <Loader2 size={20} className="animate-spin text-gray-300" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="py-10 text-center text-sm text-gray-400">لا يوجد عملاء</div>
+      ) : (
+        <>
+          {/* Desktop/tablet table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm" dir="rtl">
+              <thead>
+                <tr className="bg-gray-50/80">
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">اسم العميل</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">إجمالي المبيعات</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">إجمالي المدفوعات</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">الرصيد المتبقي</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50/70">
+                    <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmt(row.totalSales)}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmt(row.totalPayments)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`font-semibold ${balanceColor(row.remaining)}`}>
+                        {fmt(row.remaining)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="sm:hidden divide-y divide-gray-50">
+            {rows.map(row => (
+              <div key={row.id} className="px-4 py-3.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-medium text-gray-800 text-sm truncate max-w-[55%]">{row.name}</span>
+                  <span className={`text-sm font-bold ${balanceColor(row.remaining)}`}>
+                    {fmt(row.remaining)}
+                  </span>
+                </div>
+                <div className="flex gap-4 text-xs text-gray-500">
+                  <span>مبيعات: <span className="text-gray-700 font-medium">{fmt(row.totalSales)}</span></span>
+                  <span>مدفوعات: <span className="text-gray-700 font-medium">{fmt(row.totalPayments)}</span></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Recent table (purchases) ──────────────────────────────────────────────────
 
 interface RecentRow {
   id: string;
@@ -381,7 +393,7 @@ function RecentTable({ title, rows, type }: { title: string; rows: RecentRow[]; 
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(row.date)}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
-                      {new Intl.NumberFormat('en-US').format(row.totalAmount)}
+                      {fmt(row.totalAmount)}
                     </td>
                     <td className="px-4 py-3">
                       {type === 'sale' ? (
@@ -390,7 +402,7 @@ function RecentTable({ title, rows, type }: { title: string; rows: RecentRow[]; 
                           isPartial ? 'bg-yellow-100 text-yellow-700'  :
                                       'bg-red-100 text-red-600'
                         }`}>
-                          {new Intl.NumberFormat('en-US').format(row.paidAmount ?? 0)}
+                          {fmt(row.paidAmount ?? 0)}
                         </span>
                       ) : (
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${

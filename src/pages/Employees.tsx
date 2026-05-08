@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import type { Employee } from '../types';
 import { generateId } from '../utils/hash';
 import { toStr, toDateInput } from '../utils/form';
+import { fmt } from '../utils/numbers';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
@@ -112,7 +113,7 @@ export default function Employees() {
       key: 'salary',
       label: 'الراتب',
       render: (row: Employee) =>
-        row.salary.toLocaleString('en-US', { minimumFractionDigits: 0 }) + ' ₪',
+        fmt(row.salary) + ' ₪',
     },
     { key: 'joinDate', label: 'تاريخ الالتحاق' },
   ];

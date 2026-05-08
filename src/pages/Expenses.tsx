@@ -4,12 +4,15 @@ import { useToast } from '../context/ToastContext';
 import type { Expense } from '../types';
 import { generateId } from '../utils/hash';
 import { formatDate } from '../utils/formatDate';
+import { fmt } from '../utils/numbers';
+import { Receipt, Calendar, CalendarRange, Banknote, Clock, Tag } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea, Select } from '../components/ui/FormField';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import FilterBar, { type FilterField } from '../components/ui/FilterBar';
+import StatCard from '../components/ui/StatCard';
 
 const EXPENSE_CATEGORIES = [
   'رواتب', 'إيجار', 'كهرباء', 'مياه', 'هاتف/إنترنت',
@@ -44,22 +47,10 @@ const EMPTY_FILTERS: Record<string, string> = {
   supplierId:    '',
 };
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-
 function pmBadge(pm: string) {
   return PAYMENT_METHODS.find(p => p.value === pm) ?? PAYMENT_METHODS[0];
 }
 
-interface SummaryCardProps { title: string; value: string; colorBg: string; colorText: string; }
-function SummaryCard({ title, value, colorBg, colorText }: SummaryCardProps) {
-  return (
-    <div className={`${colorBg} rounded-2xl p-4 shadow-sm`}>
-      <p className="text-xs font-medium text-gray-500 mb-1">{title}</p>
-      <p className={`text-xl font-bold ${colorText}`}>{value} ₪</p>
-    </div>
-  );
-}
 
 export default function Expenses() {
   const { expenses, suppliers, addExpense, updateExpense, removeExpense } = useData();
@@ -99,10 +90,29 @@ export default function Expenses() {
   );
 
   // ── Summary stats (always from full dataset, not filtered) ────────────────
-  const totalAll    = useMemo(() => expenses.reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
-  const totalPaid   = useMemo(() => expenses.filter(e => e.paymentMethod !== 'credit').reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
-  const totalCredit = useMemo(() => expenses.filter(e => e.paymentMethod === 'credit').reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
-  const todayTotal  = useMemo(() => expenses.filter(e => e.date === today).reduce((s, e) => s + (e.amount ?? 0), 0), [expenses]);
+  const monthPrefix = today.slice(0, 7);
+
+  const expenseStats = useMemo(() => {
+    const totalAll    = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
+    const totalPaid   = expenses.filter(e => e.paymentMethod !== 'credit').reduce((s, e) => s + (e.amount ?? 0), 0);
+    const totalCredit = expenses.filter(e => e.paymentMethod === 'credit').reduce((s, e) => s + (e.amount ?? 0), 0);
+    const todayTotal  = expenses.filter(e => e.date === today).reduce((s, e) => s + (e.amount ?? 0), 0);
+    const monthTotal  = expenses.filter(e => e.date.startsWith(monthPrefix)).reduce((s, e) => s + (e.amount ?? 0), 0);
+
+    // Top category by sum
+    const catMap = new Map<string, number>();
+    for (const e of expenses) {
+      const cat = e.category || 'أخرى';
+      catMap.set(cat, (catMap.get(cat) ?? 0) + (e.amount ?? 0));
+    }
+    let topCat = '—';
+    let topCatAmt = 0;
+    for (const [cat, amt] of catMap) {
+      if (amt > topCatAmt) { topCatAmt = amt; topCat = cat; }
+    }
+
+    return { totalAll, totalPaid, totalCredit, todayTotal, monthTotal, topCat, topCatAmt };
+  }, [expenses, today, monthPrefix]);
 
   // ── Form ──────────────────────────────────────────────────────────────────
   const [form, setForm]           = useState(EMPTY_FORM);
@@ -197,11 +207,44 @@ export default function Expenses() {
   return (
     <div dir="rtl">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <SummaryCard title="إجمالي المصروفات" value={fmt(totalAll)}    colorBg="bg-red-50"     colorText="text-red-600" />
-        <SummaryCard title="مدفوع (نقد/بنك)"  value={fmt(totalPaid)}   colorBg="bg-emerald-50" colorText="text-emerald-600" />
-        <SummaryCard title="آجل غير مدفوع"    value={fmt(totalCredit)} colorBg="bg-orange-50"  colorText="text-orange-600" />
-        <SummaryCard title="مصروفات اليوم"    value={fmt(todayTotal)}  colorBg="bg-blue-50"    colorText="text-blue-600" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+        <StatCard
+          title="إجمالي المصروفات"
+          value={`${fmt(expenseStats.totalAll)} ₪`}
+          icon={<Receipt size={20} className="text-red-500" />}
+          colorBg="bg-red-50"
+        />
+        <StatCard
+          title="مصروفات اليوم"
+          value={`${fmt(expenseStats.todayTotal)} ₪`}
+          icon={<Calendar size={20} className="text-blue-600" />}
+          colorBg="bg-blue-50"
+        />
+        <StatCard
+          title="مصروفات هذا الشهر"
+          value={`${fmt(expenseStats.monthTotal)} ₪`}
+          icon={<CalendarRange size={20} className="text-purple-600" />}
+          colorBg="bg-purple-50"
+        />
+        <StatCard
+          title="مدفوع (نقد/بنك)"
+          value={`${fmt(expenseStats.totalPaid)} ₪`}
+          icon={<Banknote size={20} className="text-emerald-600" />}
+          colorBg="bg-emerald-50"
+        />
+        <StatCard
+          title="آجل غير مدفوع"
+          value={`${fmt(expenseStats.totalCredit)} ₪`}
+          icon={<Clock size={20} className="text-orange-500" />}
+          colorBg="bg-orange-50"
+        />
+        <StatCard
+          title="أعلى فئة مصروفات"
+          value={expenseStats.topCat}
+          subtitle={`${fmt(expenseStats.topCatAmt)} ₪`}
+          icon={<Tag size={20} className="text-sky-600" />}
+          colorBg="bg-sky-50"
+        />
       </div>
 
       <PageHeader

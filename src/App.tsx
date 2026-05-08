@@ -49,7 +49,7 @@ function AppRoutes() {
           <Route path="/suppliers/:id/statement" element={<SupplierStatement />} />
           <Route path="/purchases"  element={<Purchases />} />
           <Route path="/sales"      element={<Sales />} />
-          <Route path="/expenses"   element={<Expenses />} />
+          <Route path="/expenses"     element={<Expenses />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

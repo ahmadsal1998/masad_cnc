@@ -14,9 +14,9 @@ const MAIN_NAV = [
 ];
 
 const MORE_NAV = [
-  { to: '/employees', icon: Users,    label: 'الموظفون' },
-  { to: '/suppliers', icon: Truck,    label: 'الموردون' },
-  { to: '/expenses',  icon: Receipt,  label: 'المصروفات' },
+  { to: '/employees',   icon: Users,     label: 'الموظفون'  },
+  { to: '/suppliers',   icon: Truck,     label: 'الموردون'  },
+  { to: '/expenses',    icon: Receipt,   label: 'المصروفات' },
 ];
 
 export default function BottomNav() {

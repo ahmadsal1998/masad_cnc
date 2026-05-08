@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText } from 'lucide-react';
+import { FileText, Truck, AlertCircle, Banknote, DollarSign } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import type { Supplier } from '../types';
 import { generateId } from '../utils/hash';
 import { computeSupplierCurrentBalance } from '../utils/balance';
 import { toStr } from '../utils/form';
+import { fmt } from '../utils/numbers';
 import PageHeader from '../components/ui/PageHeader';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { FormField, Input, TextArea } from '../components/ui/FormField';
 import FilterBar, { type FilterField } from '../components/ui/FilterBar';
+import StatCard from '../components/ui/StatCard';
 
 const EMPTY_FORM = {
   name:    '',
@@ -63,6 +65,13 @@ export default function Suppliers() {
     }
     return map;
   }, [suppliers, purchases, supplierPayments, expenses]);
+
+  const suppStats = useMemo(() => {
+    const withBalance = [...balanceMap.values()].filter(b => b > 0).length;
+    const totalDue    = [...balanceMap.values()].filter(b => b > 0).reduce((s, b) => s + b, 0);
+    const totalPaid   = supplierPayments.reduce((s, p) => s + (p.amount ?? 0), 0);
+    return { withBalance, totalDue, totalPaid };
+  }, [balanceMap, supplierPayments]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -152,7 +161,7 @@ export default function Suppliers() {
         const bal = balanceMap.get(row.id) ?? 0;
         return (
           <span className={bal === 0 ? 'text-green-600 font-medium' : 'text-orange-500 font-medium'}>
-            {bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₪
+            {fmt(bal)} ₪
           </span>
         );
       },
@@ -181,6 +190,35 @@ export default function Suppliers() {
         onAdd={openAdd}
         addLabel="إضافة مورد"
       />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard
+          title="إجمالي الموردين"
+          value={String(suppliers.length)}
+          icon={<Truck size={20} className="text-purple-600" />}
+          colorBg="bg-purple-50"
+        />
+        <StatCard
+          title="موردون بأرصدة مستحقة"
+          value={String(suppStats.withBalance)}
+          subtitle="يحتاج دفع"
+          icon={<AlertCircle size={20} className="text-orange-500" />}
+          colorBg="bg-orange-50"
+        />
+        <StatCard
+          title="إجمالي المستحقات"
+          value={`${fmt(suppStats.totalDue)} ₪`}
+          icon={<DollarSign size={20} className="text-red-500" />}
+          colorBg="bg-red-50"
+        />
+        <StatCard
+          title="إجمالي المدفوع"
+          value={`${fmt(suppStats.totalPaid)} ₪`}
+          icon={<Banknote size={20} className="text-emerald-600" />}
+          colorBg="bg-emerald-50"
+        />
+      </div>
 
       <FilterBar
         config={FILTER_CONFIG}
